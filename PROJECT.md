@@ -305,6 +305,9 @@ For each task: ID, requirement, dependencies, status (`pending | in_progress | i
 Repository/branch, installed versions, current task, last successful checks, blocked external capabilities, and the exact next unblocked action.
 
 ### Decision log
+
+- Branding update requested after initial build: generated an original transparent espresso/brass book mark using built-in image generation; header/footer/hero now use it. Favicon (16/32/48/64px) and Apple touch icon derive from the same artwork. Replaced the three introductory Lucide icons with custom two-tone SVG illustrations. Source artwork, exact prompt and reproduction details are in `assets/brand/README.md`; asset-format script is `scripts/brand-assets.mjs`.
+- Branding verification: ESLint, strict typecheck, production build and all five production browser tests pass after the update. Phone/desktop screenshots inspected; tablet overflow test passes. Browser test launch was initially premature while the build was still running, then rerun successfully after build completion. Preview restarted with the new assets. Provider-dependent verification remains blocked as previously recorded.
 Decision, reason, alternatives considered only when material, and consequences. Distinguish requirements in this contract from your implementation choices.
 
 ### Known issues and blockers

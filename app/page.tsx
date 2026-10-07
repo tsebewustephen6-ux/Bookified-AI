@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Headphones, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Headphones, Plus } from "lucide-react";
+import Image from "next/image";
+import {
+  ReadingIcon,
+  ListeningIcon,
+  DiscoveryIcon,
+} from "@/components/premium-icons";
 import { currentOwner } from "@/lib/auth";
 import { library } from "@/lib/books";
 import { Button } from "@/components/ui/button";
@@ -69,7 +75,14 @@ export default async function Home({
           </div>
           <div className="art-book book-front">
             <div className="art-book-top">THE READER’S COMPANION</div>
-            <BookOpen size={42} />
+            <Image
+              className="art-brand-symbol"
+              src="/brand/bookified-mark.png"
+              width={60}
+              height={60}
+              alt=""
+              unoptimized
+            />
             <strong>
               Between
               <br />
@@ -194,19 +207,19 @@ export default async function Home({
           <div className="intro-grid">
             {[
               {
-                icon: BookOpen,
+                icon: ReadingIcon,
                 n: "01",
                 title: "Bring your book",
                 text: "Add a readable PDF to your private library.",
               },
               {
-                icon: Headphones,
+                icon: ListeningIcon,
                 n: "02",
                 title: "Find your voice",
                 text: "Choose a companion that feels right for you.",
               },
               {
-                icon: Sparkles,
+                icon: DiscoveryIcon,
                 n: "03",
                 title: "Follow your curiosity",
                 text: "Ask, explore, and return to the passages behind every answer.",
@@ -214,7 +227,9 @@ export default async function Home({
             ].map((item) => (
               <article key={item.n}>
                 <span className="step-number">{item.n}</span>
-                <item.icon size={25} aria-hidden />
+                <span className="premium-icon">
+                  <item.icon />
+                </span>
                 <h3>{item.title}</h3>
                 <p>{item.text}</p>
               </article>

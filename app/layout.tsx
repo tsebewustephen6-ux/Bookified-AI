@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Suspense } from "react";
 import { Navigation } from "@/components/navigation";
+import { Brand } from "@/components/brand";
 import { authConfigured } from "@/lib/env";
 import { currentOwner } from "@/lib/auth";
 import "./globals.css";
@@ -24,7 +25,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <footer className="site-footer">
-        <span>bookified.</span>
+        <Brand compact />
         <p>A little more conversation. A lot more understanding.</p>
         <span>YOUR BOOKS, YOUR SPACE</span>
       </footer>

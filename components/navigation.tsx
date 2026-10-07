@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { BookOpen, Plus, ArrowUpRight } from "lucide-react";
+import { Plus, ArrowUpRight } from "lucide-react";
+import { Brand } from "./brand";
 export function Navigation({
   signedIn,
   configured,
@@ -15,10 +16,7 @@ export function Navigation({
     <header className="site-header">
       <div className="nav-wrap">
         <Link className="brand" href="/" aria-label="Bookified home">
-          <span className="brand-mark">
-            <BookOpen size={22} aria-hidden />
-          </span>
-          bookified<span className="brand-dot">.</span>
+          <Brand />
         </Link>
         <nav aria-label="Main navigation">
           {[
