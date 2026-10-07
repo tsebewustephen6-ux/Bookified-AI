@@ -1,69 +1,227 @@
-import Image from "next/image";
-
-export default function Home() {
+import Link from "next/link";
+import { ArrowRight, BookOpen, Headphones, Plus, Sparkles } from "lucide-react";
+import { currentOwner } from "@/lib/auth";
+import { library } from "@/lib/books";
+import { Button } from "@/components/ui/button";
+import { LibrarySearch } from "@/components/search";
+import { BookCover } from "@/components/book-cover";
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  const [owner, params] = await Promise.all([currentOwner(), searchParams]);
+  const q = (params.q || "").slice(0, 200);
+  const page = Math.max(
+    1,
+    Math.min(10000, Math.floor(Number(params.page) || 1)),
+  );
+  let result: Awaited<ReturnType<typeof library>> | undefined;
+  let unavailable = false;
+  if (owner) {
+    try {
+      result = await library(owner, q, page);
+    } catch {
+      unavailable = true;
+    }
+  }
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <>
+      <section className="hero">
+        <div className="hero-copy">
+          <p className="eyebrow">
+            <span />A NEW CHAPTER IN READING
           </p>
+          <h1>
+            Your books.
+            <br />A voice.
+            <br />
+            <em>A conversation.</em>
+          </h1>
+          <p className="hero-description">
+            Go beyond the last page. Turn the books you love into thoughtful
+            conversations, grounded in their words.
+          </p>
+          <Button asChild>
+            <Link href={owner ? "/books/new" : "/sign-in"}>
+              {owner ? "Add your first chapter" : "Start your story"}
+              <ArrowRight size={18} />
+            </Link>
+          </Button>
+          <div className="hero-note">
+            <Headphones size={16} aria-hidden />
+            Upload a book. Choose a voice. Talk to its contents.
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="hero-art" aria-hidden>
+          <div className="art-orbit" />
+          <div className="art-label">
+            A whole new way
+            <br />
+            to get lost in a book.
+          </div>
+          <div className="art-book book-back">
+            <span>
+              THE ART OF
+              <br />
+              CURIOSITY
+            </span>
+          </div>
+          <div className="art-book book-front">
+            <div className="art-book-top">THE READER’S COMPANION</div>
+            <BookOpen size={42} />
+            <strong>
+              Between
+              <br />
+              <em>the lines.</em>
+            </strong>
+            <div className="book-bottom">THERE’S MORE TO THE STORY</div>
+          </div>
+          <div className="voice-bubble">
+            <span className="sound-bars">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+            <span>Let’s talk about it.</span>
+          </div>
+          <span className="art-star">✧</span>
         </div>
-      </main>
-    </div>
+      </section>
+      <section className="library-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">YOUR PERSONAL BOOKSHELF</p>
+            <h2>
+              {owner ? "Recent books" : "Good stories deserve a conversation."}
+            </h2>
+          </div>
+          {owner ? (
+            <Button asChild variant="outline">
+              <Link href="/books/new">
+                <Plus size={16} />
+                Add Book
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+        {owner ? (
+          <>
+            <LibrarySearch key={q} initial={q} />
+            {unavailable ? (
+              <div className="empty-state" role="status">
+                <h3>Your library is temporarily unavailable</h3>
+                <p>
+                  We couldn’t reach your library. Refresh to try again; your
+                  books are preserved.
+                </p>
+              </div>
+            ) : result?.books.length ? (
+              <>
+                <div className="book-grid">
+                  {result.books.map((book) => (
+                    <article className="book-card" key={book.id}>
+                      <Link
+                        className="cover-link"
+                        href={"/books/" + book.slug}
+                        aria-label={"Open " + book.title}
+                      >
+                        <BookCover {...book} />
+                      </Link>
+                      <div className="book-info">
+                        <span className={"status status-" + book.status}>
+                          {book.status}
+                        </span>
+                        <h3>{book.title}</h3>
+                        <p>{book.author}</p>
+                        <Link
+                          className="text-link"
+                          href={"/books/" + book.slug}
+                        >
+                          Open book <ArrowRight size={15} />
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <nav className="pagination" aria-label="Library pages">
+                  {page > 1 ? (
+                    <Link
+                      href={
+                        "/?q=" + encodeURIComponent(q) + "&page=" + (page - 1)
+                      }
+                    >
+                      Previous
+                    </Link>
+                  ) : null}
+                  <span>Page {page}</span>
+                  {page * 12 < result.total ? (
+                    <Link
+                      href={
+                        "/?q=" + encodeURIComponent(q) + "&page=" + (page + 1)
+                      }
+                    >
+                      Next
+                    </Link>
+                  ) : null}
+                </nav>
+              </>
+            ) : (
+              <div className="empty-state">
+                <BookOpen size={34} aria-hidden />
+                <h3>
+                  {q
+                    ? "No books match your search"
+                    : "Your next great conversation starts here"}
+                </h3>
+                <p>
+                  {q
+                    ? "Try a different title or author, or clear your search."
+                    : "Add a PDF to make this little corner of the world your own."}
+                </p>
+                <Button asChild variant="outline">
+                  <Link href={q ? "/" : "/books/new"}>
+                    {q ? "Clear search" : "Add your first book"}
+                    <Plus size={16} />
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="intro-grid">
+            {[
+              {
+                icon: BookOpen,
+                n: "01",
+                title: "Bring your book",
+                text: "Add a readable PDF to your private library.",
+              },
+              {
+                icon: Headphones,
+                n: "02",
+                title: "Find your voice",
+                text: "Choose a companion that feels right for you.",
+              },
+              {
+                icon: Sparkles,
+                n: "03",
+                title: "Follow your curiosity",
+                text: "Ask, explore, and return to the passages behind every answer.",
+              },
+            ].map((item) => (
+              <article key={item.n}>
+                <span className="step-number">{item.n}</span>
+                <item.icon size={25} aria-hidden />
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
   );
 }
