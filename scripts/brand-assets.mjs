@@ -1,5 +1,5 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 // Format/size derivatives of the generated artwork, preserving transparent alpha.
 const source = await loadImage("assets/brand/bookified-logo-source.png");
@@ -46,10 +46,18 @@ function render(size, backdrop = false) {
   return canvas.toBuffer("image/png");
 }
 await mkdir("public/brand", { recursive: true });
-await writeFile("public/brand/bookified-mark.png", render(256));
-await writeFile("app/apple-icon.png", render(180, true));
+if (!process.argv.includes("--favicon-only")) {
+  await writeFile("public/brand/bookified-mark.png", render(256));
+  await writeFile("app/apple-icon.png", render(180, true));
+}
+// The tab icon uses fewer page details for legibility at 16px, with transparent corners.
+const favicon = await loadImage(await readFile("app/icon.svg"));
 const sizes = [16, 32, 48, 64];
-const images = sizes.map((size) => render(size, true));
+const images = sizes.map((size) => {
+  const canvas = createCanvas(size, size);
+  canvas.getContext("2d").drawImage(favicon, 0, 0, size, size);
+  return canvas.toBuffer("image/png");
+});
 const header = Buffer.alloc(6 + images.length * 16);
 header.writeUInt16LE(1, 2);
 header.writeUInt16LE(images.length, 4);
@@ -66,5 +74,5 @@ images.forEach((png, index) => {
 });
 await writeFile("app/favicon.ico", Buffer.concat([header, ...images]));
 console.log(
-  "Created logo PNG, Apple icon and 16/32/48/64px favicon from the generated mark.",
+  "Created 16/32/48/64px favicon from the simplified transparent SVG mark.",
 );

@@ -1,6 +1,6 @@
 # Bookified brand artwork
 
-Generated with the built-in image_gen tool, using a genuine transparent background. Original artwork: `bookified-logo-source.png`. The app uses `public/brand/bookified-mark.png`; `app/favicon.ico` and `app/apple-icon.png` are size/format derivatives of the same mark. Rebuild derivatives with `node scripts/brand-assets.mjs`.
+Generated with the built-in image_gen tool, using a genuine transparent background. Original artwork: `bookified-logo-source.png`. The app uses `public/brand/bookified-mark.png`; `app/apple-icon.png` is a size/format derivative of the same mark. The browser favicon uses `app/icon.svg`, a simplified open-book mark with transparent corners and ivory pages for clarity on light and dark tabs. `app/favicon.ico` contains its 16/32/48/64px raster equivalents. Rebuild all derivatives with `node scripts/brand-assets.mjs`, or only the favicon with `node scripts/brand-assets.mjs --favicon-only`.
 
 The wordmark uses locally bundled IBM Plex Serif. The three introductory card icons are custom two-tone SVG artwork in `components/premium-icons.tsx`, matching the espresso/brass palette. No paid icon subscription is required.
 
