@@ -14,22 +14,30 @@ export const metadata: Metadata = {
   description: "Upload a book. Choose a voice. Talk to its contents.",
 };
 
+import { headers } from "next/headers";
+
 async function Shell({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
+  const headersList = headers();
+  const userAgent = headersList.get("user-agent") || "";
+  const isNative = userAgent.includes("BookifiedMobileApp");
+
   return (
     <>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <Navigation user={user} configured={authConfigured()} />
+      <Navigation user={user} configured={authConfigured()} isNative={isNative} />
       <main id="main" className="main-wrap">
         {children}
       </main>
-      <footer className="site-footer">
-        <Brand compact />
-        <p>A little more conversation. A lot more understanding.</p>
-        <span>YOUR BOOKS, YOUR SPACE</span>
-      </footer>
+      {!isNative && (
+        <footer className="site-footer">
+          <Brand compact />
+          <p>A little more conversation. A lot more understanding.</p>
+          <span>YOUR BOOKS, YOUR SPACE</span>
+        </footer>
+      )}
     </>
   );
 }

@@ -7,14 +7,6 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
 export function MobileOnboarding() {
-  const [isNative, setIsNative] = useState(false);
-
-  useEffect(() => {
-    setIsNative(Capacitor.isNativePlatform());
-  }, []);
-
-  if (!isNative) return null;
-
   return (
     <div className="fixed inset-0 flex flex-col bg-[#FDFBF7] text-[#2A2626] overflow-hidden z-[9999]">
       <div className="flex-1 flex flex-col justify-center items-center relative p-8">

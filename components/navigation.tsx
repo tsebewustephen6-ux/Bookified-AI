@@ -4,24 +4,23 @@ import { usePathname, useRouter } from "next/navigation";
 import { Plus, ArrowUpRight, LogOut, User as UserIcon } from "lucide-react";
 import { Brand } from "./brand";
 import { signOut } from "@/lib/auth-client";
-import { Capacitor } from "@capacitor/core";
 import { useState, useRef, useEffect } from "react";
 
 export function Navigation({
   user,
   configured,
+  isNative = false,
 }: {
   user: { id: string; name?: string | null; email?: string | null } | null;
   configured: boolean;
+  isNative?: boolean;
 }) {
   const path = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [isNative, setIsNative] = useState(false);
 
   useEffect(() => {
-    setIsNative(Capacitor.isNativePlatform());
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);

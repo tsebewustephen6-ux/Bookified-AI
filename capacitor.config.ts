@@ -7,7 +7,8 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://bookified-beige-six.vercel.app',
     cleartext: true
-  }
+  },
+  appendUserAgent: 'BookifiedMobileApp'
 };
 
 export default config;
