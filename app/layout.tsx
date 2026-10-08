@@ -18,7 +18,7 @@ import { headers } from "next/headers";
 
 async function Shell({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  const headersList = headers();
+  const headersList = await headers();
   const userAgent = headersList.get("user-agent") || "";
   const isNative = userAgent.includes("BookifiedMobileApp");
 

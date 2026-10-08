@@ -15,7 +15,7 @@ import { MobileOnboarding } from "@/components/mobile-onboarding";
 
 export default async function Home() {
   const owner = await currentOwner();
-  const headersList = headers();
+  const headersList = await headers();
   const userAgent = headersList.get("user-agent") || "";
   const isNative = userAgent.includes("BookifiedMobileApp");
 
