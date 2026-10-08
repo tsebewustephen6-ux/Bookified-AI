@@ -176,4 +176,54 @@ export const Rate =
   (mongoose.models.Rate as mongoose.Model<
     mongoose.InferSchemaType<typeof rateSchema>
   >) || mongoose.model("Rate", rateSchema);
-export const models = [Book, Segment, VoiceSession, Account, Usage, Job, Rate];
+const paymentSchema = new Schema(
+  {
+    ownerId: { type: String, required: true },
+    reference: { type: String, required: true, unique: true },
+    idempotencyKey: { type: String, required: true },
+    plan: { type: String, enum: ["standard", "pro"], required: true },
+    amountMinor: { type: Number, required: true },
+    currency: { type: String, enum: ["GHS"], required: true },
+    merchantAccount: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["pending", "paid", "failed", "refunded"],
+      default: "pending",
+    },
+    open: { type: Boolean, default: true },
+    checkoutUrl: String,
+    checkoutId: String,
+    transactionId: String,
+    periodStart: Date,
+    periodEnd: Date,
+    verifiedAt: Date,
+  },
+  options,
+);
+paymentSchema.index({ ownerId: 1, idempotencyKey: 1 }, { unique: true });
+paymentSchema.index(
+  { ownerId: 1, open: 1 },
+  { unique: true, partialFilterExpression: { open: true } },
+);
+paymentSchema.index({ ownerId: 1, status: 1, periodEnd: 1 });
+paymentSchema.index(
+  { transactionId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { transactionId: { $type: "string" } },
+  },
+);
+export const Payment =
+  (mongoose.models.Payment as mongoose.Model<
+    mongoose.InferSchemaType<typeof paymentSchema>
+  >) || mongoose.model("Payment", paymentSchema);
+export const models = [
+  Book,
+  Segment,
+  VoiceSession,
+  Account,
+  Usage,
+  Job,
+  Rate,
+  Payment,
+];

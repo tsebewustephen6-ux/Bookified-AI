@@ -3,17 +3,22 @@ import { currentOwner, entitlement } from "@/lib/auth";
 import { plans, type Plan } from "@/lib/plans";
 import { usageSummary } from "@/lib/sessions";
 import { Billing } from "@/components/billing";
+import { paymentCatalog } from "@/lib/hubtel";
+import { billingSummary, type BillingSummary } from "@/lib/billing";
 
 export default async function Subscriptions() {
   const owner = await currentOwner();
   let current: Plan | undefined;
   let usage: Awaited<ReturnType<typeof usageSummary>> | undefined;
   let unavailable = false;
+  let billing: BillingSummary | undefined;
+  const catalog = paymentCatalog();
   if (owner) {
     try {
-      [current, usage] = await Promise.all([
+      [current, usage, billing] = await Promise.all([
         entitlement(owner),
         usageSummary(owner),
+        billingSummary(owner),
       ]);
     } catch {
       unavailable = true;
@@ -54,8 +59,8 @@ export default async function Subscriptions() {
             </p>
           </div>
           <p style={{ fontSize: 12 }}>
-            Resets {new Date(usage.resetAt).toUTCString()}. Upgrades apply
-            immediately; downgrades keep your existing books readable.
+            Resets {new Date(usage.resetAt).toUTCString()}. Existing books stay
+            readable when paid access ends.
           </p>
         </section>
       ) : null}
@@ -64,6 +69,17 @@ export default async function Subscriptions() {
           ([name, limits]) => (
             <section className="plan-card" key={name}>
               <h2>{name[0].toUpperCase() + name.slice(1)}</h2>
+              {name === "free" ? (
+                <p>Free</p>
+              ) : catalog.prices ? (
+                <p>
+                  {new Intl.NumberFormat("en-GH", {
+                    style: "currency",
+                    currency: "GHS",
+                  }).format(catalog.prices[name] / 100)}{" "}
+                  for one month
+                </p>
+              ) : null}
               {current === name ? (
                 <span className="status status-ready">Current plan</span>
               ) : null}
@@ -84,7 +100,21 @@ export default async function Subscriptions() {
         )}
       </div>
       {owner ? (
-        <Billing currentPlan={current} />
+        <Billing
+          key={
+            billing?.pending?.reference ??
+            billing?.paidUntil ??
+            current ??
+            "unavailable"
+          }
+          currentPlan={current}
+          catalog={
+            unavailable
+              ? { available: false, currency: "GHS", prices: null }
+              : catalog
+          }
+          summary={billing}
+        />
       ) : (
         <div className="setup-note">
           <Link className="text-link" href="/sign-in">
@@ -94,8 +124,9 @@ export default async function Subscriptions() {
       )}
       <p style={{ margin: "25px 0 55px", color: "var(--muted)", fontSize: 12 }}>
         Session allowances reset on the first day of each UTC calendar month.
-        Upgrades take effect immediately; downgrades keep your existing books
-        readable.
+        Paid access begins after payment verification and lasts one calendar
+        month. Renewals are paid manually; there are no automatic debits.
+        Existing books stay readable after expiry.
       </p>
     </>
   );

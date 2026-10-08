@@ -1,8 +1,10 @@
 import { connect } from "@/database/connection";
-import { Job } from "@/database/models";
+import { Job, Payment } from "@/database/models";
 import { maintenance } from "@/lib/maintenance";
 import { dispatchBook } from "@/lib/job-dispatch";
 import { secretEqual } from "@/lib/security";
+import { dispatchPayment } from "@/lib/payment-dispatch";
+import { paymentCatalog } from "@/lib/hubtel";
 export const runtime = "nodejs";
 export const maxDuration = 180;
 export async function GET(request: Request) {
@@ -26,8 +28,19 @@ export async function GET(request: Request) {
       .limit(25);
     for (const job of jobs)
       await dispatchBook(job.bookId.toString(), job.ownerId);
+    const payments = paymentCatalog().available
+      ? await Payment.find({
+          $or: [
+            { status: "pending", open: true },
+            { status: "paid", periodEnd: { $gt: new Date() } },
+          ],
+        })
+          .sort({ verifiedAt: 1, createdAt: 1 })
+          .limit(25)
+      : [];
+    for (const payment of payments) await dispatchPayment(payment.reference);
     return Response.json(
-      { recovered: jobs.length },
+      { recovered: jobs.length, paymentsRecovered: payments.length },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch {

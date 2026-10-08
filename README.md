@@ -2,7 +2,7 @@
 
 Upload a PDF, choose an account-verified voice, and talk to its contents.
 
-Read [PROJECT.md](PROJECT.md) for the build contract, reconciled implementation ledger, setup and remaining acceptance gates. The current working tree uses Better Auth with MongoDB; paid checkout is unavailable. Voice configuration requires live provider verification.
+Read [PROJECT.md](PROJECT.md) for the build contract, reconciled implementation ledger, setup and remaining acceptance gates. The current working tree uses Better Auth with MongoDB. Hubtel MoMo/card checkout is implemented but disabled pending merchant onboarding, prices and approved status-API egress; see [payment setup](docs/hubtel-payments.md). Voice configuration requires live provider verification.
 
 Use Node 24. Run npm ci, configure ignored .env.local from .env.example, then npm run config:check and npm run db:indexes. Start npm run dev and npm run worker separately.
 

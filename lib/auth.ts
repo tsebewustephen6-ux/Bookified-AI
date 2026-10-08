@@ -4,8 +4,8 @@ import { connection } from "next/server";
 import { authConfigured } from "./env";
 import { AppError } from "./errors";
 import { type Plan } from "./plans";
-import { auth, getAuthDb } from "./better-auth";
-import { ObjectId } from "mongodb";
+import { auth } from "./better-auth";
+import { paidEntitlement } from "./billing";
 
 export { auth };
 
@@ -50,28 +50,7 @@ export async function currentUser() {
 
 export async function entitlement(owner: string): Promise<Plan> {
   try {
-    const session = await getSession();
-    if (session?.user?.id === owner) {
-      const userPlan = (session.user as { plan?: string }).plan;
-      if (userPlan === "pro" || userPlan === "standard" || userPlan === "free") {
-        return userPlan;
-      }
-    }
-
-    const db = getAuthDb();
-    let query: Record<string, unknown> = { id: owner };
-    if (ObjectId.isValid(owner)) {
-      query = {
-        $or: [{ _id: new ObjectId(owner) }, { _id: owner }, { id: owner }],
-      };
-    }
-    const user = await db.collection("user").findOne(query);
-    if (!user) return "free";
-    const plan = user.plan;
-    if (plan === "pro" || plan === "standard" || plan === "free") {
-      return plan;
-    }
-    return "free";
+    return await paidEntitlement(owner);
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new AppError(
