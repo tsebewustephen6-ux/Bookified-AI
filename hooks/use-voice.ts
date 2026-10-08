@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type Vapi from "@vapi-ai/web";
 import { z } from "zod";
-import { api } from "@/lib/client-api";
+import { api, ApiError } from "@/lib/client-api";
 import { appendTranscript, type TranscriptMessage } from "@/lib/transcripts";
 export type VoiceState =
   | "idle"
@@ -234,6 +234,8 @@ export function useVoice(bookId: string, limit: number) {
       });
       if (live()) void poll();
     } catch (err) {
+      if (err instanceof ApiError && err.code === "CALL_REJECTED")
+        admissionKey.current = null;
       if (attempt === generation.current) {
         const details = z
           .object({

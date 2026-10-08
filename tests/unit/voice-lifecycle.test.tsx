@@ -141,3 +141,25 @@ it("provider errors clear listeners, finalize once and allow a clean restart", a
   await act(async () => result.current.stop());
   expect(fixture.clients[1].stop).toHaveBeenCalledTimes(1);
 });
+
+it("uses a fresh admission key only after a definitively rejected startup", async () => {
+  for (const code of ["CALL_REJECTED", "PROVIDER_UNAVAILABLE"]) {
+    const keys: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        keys.push(JSON.parse(String(init?.body)).idempotencyKey);
+        return Response.json(
+          { error: { code, message: "Isolated startup failure" } },
+          { status: 503 },
+        );
+      }),
+    );
+    const { result, unmount } = renderHook(() => useVoice("book-fixture", 300));
+    await act(async () => result.current.start());
+    await act(async () => result.current.start());
+    expect(keys).toHaveLength(2);
+    expect(keys[0] === keys[1]).toBe(code === "PROVIDER_UNAVAILABLE");
+    unmount();
+  }
+});

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 import {
   beforeAll,
@@ -402,8 +403,37 @@ describe("provider fixtures with real admission and endpoint authorization", () 
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes("/assistant/"))
+          return Response.json({
+            id: process.env.VAPI_ASSISTANT_ID,
+            orgId: "c4613cc0-3c78-4f55-b9d9-b75a09fd97f1",
+          });
         if (url.endsWith("/call/web")) {
           created++;
+          const headers = init?.headers as Record<string, string>;
+          expect(headers.Origin).toBe("https://bookified.example");
+          expect(headers.Authorization).not.toBe(
+            "Bearer " + process.env.VAPI_PRIVATE_KEY,
+          );
+          const [header, claims, signature] =
+            headers.Authorization.slice(7).split(".");
+          expect(signature).toBe(
+            createHmac("sha256", process.env.VAPI_PRIVATE_KEY!)
+              .update(header + "." + claims)
+              .digest("base64url"),
+          );
+          const token = JSON.parse(Buffer.from(claims, "base64url").toString());
+          expect(token.exp - token.iat).toBe(60);
+          expect(token.orgId).toBe("c4613cc0-3c78-4f55-b9d9-b75a09fd97f1");
+          expect(token.token).toEqual({
+            tag: "public",
+            restrictions: {
+              enabled: true,
+              allowedOrigins: ["https://bookified.example"],
+              allowedAssistantIds: [process.env.VAPI_ASSISTANT_ID],
+              allowTransientAssistant: false,
+            },
+          });
           const payload: unknown = JSON.parse(String(init?.body));
           const parsed = z
             .object({
@@ -570,6 +600,51 @@ describe("provider fixtures with real admission and endpoint authorization", () 
     );
     expect((await Usage.findOne({ ownerId: book.ownerId }))?.connected).toBe(0);
     expect((await Usage.findOne({ ownerId: book.ownerId }))?.reserved).toBe(0);
+  });
+
+  it("refunds rejected web calls immediately, but retains ambiguous creation for reconciliation", async () => {
+    configureVapi();
+    for (const status of [401, 400, 503]) {
+      const book = await ready("rejected-provider-" + status);
+      const record = await reserveSession(
+        book.ownerId,
+        book._id.toString(),
+        "free",
+        crypto.randomUUID(),
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) =>
+          url.includes("/assistant/")
+            ? Response.json({
+                id: process.env.VAPI_ASSISTANT_ID,
+                orgId: "c4613cc0-3c78-4f55-b9d9-b75a09fd97f1",
+              })
+            : Response.json({ message: "Isolated failure" }, { status }),
+        ),
+      );
+      await expect(createCall(record._id.toString())).rejects.toMatchObject({
+        code: status === 503 ? "PROVIDER_UNAVAILABLE" : "CALL_REJECTED",
+      });
+      const current = await VoiceSession.findById(record._id);
+      const usage = await Usage.findOne({ ownerId: book.ownerId });
+      expect(current?.status).toBe(status === 503 ? "reserved" : "failed");
+      expect(usage?.reserved).toBe(status === 503 ? 1 : 0);
+      expect(usage?.connected).toBe(0);
+      if (status !== 503) {
+        expect(
+          (await Account.findOne({ ownerId: book.ownerId }))?.activeSessionId,
+        ).toBeNull();
+        await expect(
+          reserveSession(
+            book.ownerId,
+            book._id.toString(),
+            "free",
+            crypto.randomUUID(),
+          ),
+        ).resolves.toBeDefined();
+      }
+    }
   });
   it("refunds unknown creation only after checking the provider, and retains reservations during outages", async () => {
     configureVapi();

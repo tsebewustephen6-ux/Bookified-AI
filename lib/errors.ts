@@ -5,6 +5,7 @@ export type ErrorCode =
   | "QUOTA_REACHED"
   | "PROCESSING_FAILED"
   | "PROVIDER_UNAVAILABLE"
+  | "CALL_REJECTED"
   | "CONFLICT"
   | "INTERNAL";
 export class AppError extends Error {
