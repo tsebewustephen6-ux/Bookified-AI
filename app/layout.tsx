@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Suspense } from "react";
 import { Navigation } from "@/components/navigation";
 import { Brand } from "@/components/brand";
 import { authConfigured } from "@/lib/env";
-import { currentOwner } from "@/lib/auth";
+import { currentUser } from "@/lib/auth";
 import "./globals.css";
+
 export const metadata: Metadata = {
   title: {
     default: "Bookified — A new chapter in reading",
@@ -13,14 +13,15 @@ export const metadata: Metadata = {
   },
   description: "Upload a book. Choose a voice. Talk to its contents.",
 };
+
 async function Shell({ children }: { children: React.ReactNode }) {
-  const owner = await currentOwner();
+  const user = await currentUser();
   return (
     <>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <Navigation signedIn={Boolean(owner)} configured={authConfigured()} />
+      <Navigation user={user} configured={authConfigured()} />
       <main id="main" className="main-wrap">
         {children}
       </main>
@@ -32,12 +33,13 @@ async function Shell({ children }: { children: React.ReactNode }) {
     </>
   );
 }
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const content = (
+  return (
     <html lang="en">
       <body>
         <Suspense fallback={<p className="main-wrap">Opening Bookified…</p>}>
@@ -45,16 +47,5 @@ export default function RootLayout({
         </Suspense>
       </body>
     </html>
-  );
-  return authConfigured() ? (
-    <ClerkProvider
-      appearance={{
-        variables: { colorPrimary: "#745444", borderRadius: "0.75rem" },
-      }}
-    >
-      {content}
-    </ClerkProvider>
-  ) : (
-    content
   );
 }

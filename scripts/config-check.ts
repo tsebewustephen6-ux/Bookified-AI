@@ -3,8 +3,7 @@ import { voices } from "../lib/voices";
 import { validateVapiConfiguration } from "../lib/vapi";
 import { AppError } from "../lib/errors";
 const keys = [
-  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
-  "CLERK_SECRET_KEY",
+  "BETTER_AUTH_SECRET",
   "MONGODB_URI",
   "BLOB_READ_WRITE_TOKEN",
   "VAPI_PRIVATE_KEY",

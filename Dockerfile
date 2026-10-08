@@ -3,9 +3,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-# Publishable key is public, fixed by Next.js at build time. Private keys are runtime secrets.
-ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 RUN npm run build
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app

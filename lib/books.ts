@@ -152,12 +152,20 @@ export async function enqueue(
     if (!book) throw new AppError("NOT_FOUND", "Book not found.", 404);
     if (book.status === "ready" || book.status === "processing")
       return dto(book);
-    if (!book.pdfComplete || (book.expectedCoverType && !book.coverComplete))
-      throw new AppError(
-        "CONFLICT",
-        "Upload confirmation is pending. Try again shortly.",
-        409,
-      );
+    if (!book.pdfComplete || (book.expectedCoverType && !book.coverComplete)) {
+      if (process.env.NODE_ENV !== "production") {
+        // In local development, Vercel Blob cannot send webhooks to localhost.
+        // We know the client upload finished because they called this route.
+        book.pdfComplete = true;
+        if (book.expectedCoverType) book.coverComplete = true;
+      } else {
+        throw new AppError(
+          "CONFLICT",
+          "Upload confirmation is pending. Try again shortly.",
+          409,
+        );
+      }
+    }
     const job = await Job.findOne({ bookId: book._id }).session(session);
     if (retry && job && job.attempts >= 3)
       throw new AppError(

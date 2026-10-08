@@ -10,10 +10,7 @@ export function required(name: string) {
   return value;
 }
 export const authConfigured = () =>
-  Boolean(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-    process.env.CLERK_SECRET_KEY,
-  );
+  Boolean(process.env.MONGODB_URI && (process.env.BETTER_AUTH_SECRET?.length ?? 0) >= 32);
 export function baseUrl() {
   const configured = required("APP_BASE_URL");
   try {

@@ -1,0 +1,10 @@
+.git/
+.next/
+node_modules/
+.env*
+!.env.example
+.test-data/
+test-results/
+playwright-report/
+coverage/
+temp_image.png

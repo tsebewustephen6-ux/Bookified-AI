@@ -2,8 +2,10 @@
 
 Upload a PDF, choose an account-verified voice, and talk to its contents.
 
-Read [PROJECT.md](PROJECT.md) for the authoritative build contract, implementation evidence, setup, deployment configuration, and remaining live acceptance. The application is implemented with live verification blocked by missing Clerk, Atlas, private Blob and Vapi configuration.
+Read [PROJECT.md](PROJECT.md) for the build contract, reconciled implementation ledger, setup and remaining acceptance gates. The current working tree uses Better Auth with MongoDB; paid checkout is unavailable. Voice configuration and a persistent processing worker require live setup.
 
-Use Node 24. Run `npm ci`, configure ignored `.env.local` from `.env.example`, then run `npm run config:check` and `npm run db:indexes`. Start `npm run dev` and `npm run worker` in separate terminals. Open http://localhost:3000.
+Use Node 24. Run npm ci, configure ignored .env.local from .env.example, then npm run config:check and npm run db:indexes. Start npm run dev and npm run worker separately.
 
-Local checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`. The integration suite uses a disposable real MongoDB replica set and isolated provider fixtures; it does not prove live checkout or audio works. See PROJECT.md for the required live acceptance checklist.
+Vercel hosts the web application. Host npm run worker on a persistent supervised Node service with the same database/storage/voice settings. Configure APP_BASE_URL and BETTER_AUTH_URL to the hosted HTTPS origin; keep all secrets in encrypted environment settings.
+
+Local gates: npm run lint, npm run typecheck, npm test, npm run build, npm run test:e2e. Browser tests accept BOOKIFIED_TEST_PORT when the normal preview port is occupied. Provider fixtures do not prove real checkout or audio.

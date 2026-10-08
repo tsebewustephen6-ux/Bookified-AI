@@ -11,12 +11,19 @@ export async function GET(
     const book = await ownedBook(await identity(), (await context.params).id);
     if (!book.coverKey || book.status !== "ready")
       throw new AppError("NOT_FOUND", "Cover not found.", 404);
+
     const result = await get(book.coverKey, { access: "private" });
     if (!result || result.statusCode !== 200)
       throw new AppError("NOT_FOUND", "Cover not found.", 404);
+
+    // Force a valid image content type to prevent nosniff blocking
+    const contentType = result.blob.contentType === "application/octet-stream" || !result.blob.contentType
+      ? book.expectedCoverType || "image/jpeg"
+      : result.blob.contentType;
+
     return new Response(result.stream, {
       headers: {
-        "Content-Type": result.blob.contentType,
+        "Content-Type": contentType,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

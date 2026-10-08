@@ -176,6 +176,12 @@ export function UploadForm({
             <label htmlFor="pdf">Book PDF</label>
             <div
               className="dropzone"
+              style={{ cursor: "pointer" }}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).tagName !== "INPUT") {
+                  document.getElementById("pdf")?.click();
+                }
+              }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
@@ -205,6 +211,12 @@ export function UploadForm({
             </label>
             <div
               className="dropzone"
+              style={{ cursor: "pointer" }}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).tagName !== "INPUT") {
+                  document.getElementById("cover")?.click();
+                }
+              }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();

@@ -3,6 +3,7 @@ import { currentOwner, entitlement } from "@/lib/auth";
 import { plans, type Plan } from "@/lib/plans";
 import { usageSummary } from "@/lib/sessions";
 import { Billing } from "@/components/billing";
+
 export default async function Subscriptions() {
   const owner = await currentOwner();
   let current: Plan | undefined;
@@ -53,8 +54,8 @@ export default async function Subscriptions() {
             </p>
           </div>
           <p style={{ fontSize: 12 }}>
-            Resets {new Date(usage.resetAt).toUTCString()}. Upgrades apply after
-            server confirmation; downgrades keep your existing books readable.
+            Resets {new Date(usage.resetAt).toUTCString()}. Upgrades apply
+            immediately; downgrades keep your existing books readable.
           </p>
         </section>
       ) : null}
@@ -83,17 +84,18 @@ export default async function Subscriptions() {
         )}
       </div>
       {owner ? (
-        <Billing />
+        <Billing currentPlan={current} />
       ) : (
         <div className="setup-note">
           <Link className="text-link" href="/sign-in">
-            Sign in to see current prices and subscription options →
+            Sign in to see subscription options →
           </Link>
         </div>
       )}
       <p style={{ margin: "25px 0 55px", color: "var(--muted)", fontSize: 12 }}>
-        Prices and currencies are provided by Clerk checkout. Your confirmed
-        plan changes only after the provider activates your entitlement.
+        Session allowances reset on the first day of each UTC calendar month.
+        Upgrades take effect immediately; downgrades keep your existing books
+        readable.
       </p>
     </>
   );

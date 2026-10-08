@@ -28,13 +28,13 @@ for (const width of [375, 768, 1440])
     ).toHaveAttribute("aria-current", "page");
     expect(errors).toEqual([]);
   });
-test("auth setup states and protected routes are safe without credentials", async ({
+test("sign-in and protected routes reject anonymous access", async ({
   page,
 }) => {
   await page.goto("/books/new");
   await expect(page).toHaveURL(/sign-in/);
   await expect(
-    page.getByRole("heading", { name: "Sign-in is being prepared" }),
+    page.getByRole("heading", { name: /^(Sign-in is being prepared|Sign in to Bookified)$/ }),
   ).toBeVisible();
   const result = await page.request.get(
     "/api/books/000000000000000000000000/processing",
