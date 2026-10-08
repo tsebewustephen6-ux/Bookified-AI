@@ -24,7 +24,7 @@ export default async function LibraryPage({
   );
   let result: Awaited<ReturnType<typeof library>> | undefined;
   let unavailable = false;
-  
+
   try {
     result = await library(owner, q, page);
   } catch {
@@ -47,7 +47,7 @@ export default async function LibraryPage({
       </div>
 
       <LibrarySearch key={q} initial={q} />
-      
+
       {unavailable ? (
         <div className="empty-state" role="status">
           <h3>Your library is temporarily unavailable</h3>
