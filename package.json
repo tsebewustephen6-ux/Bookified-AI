@@ -24,6 +24,7 @@
     "@radix-ui/react-slot": "^1.4.0",
     "@vapi-ai/web": "^2.7.1",
     "@vercel/blob": "^2.8.1",
+    "@vercel/queue": "^0.8.0",
     "better-auth": "^1.7.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -39,6 +40,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/turbopack": "^4",
     "@testing-library/react": "^16.3.3",
@@ -55,9 +58,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "vitest": "^5.0.3",
-    "@emnapi/core": "1.11.3",
-    "@emnapi/runtime": "1.11.3"
+    "vitest": "^5.0.3"
   },
   "type": "module",
   "engines": {

@@ -50,6 +50,13 @@ vi.mock("@vercel/blob", () => ({
     }
   }),
 }));
+import { consumeProcessingMessage } from "../../lib/hosted-worker";
+import { jobSignature } from "../../lib/job-dispatch";
+import { GET as cronMaintenance } from "../../app/api/cron/maintenance/route";
+const queue = vi.hoisted(() => ({
+  send: vi.fn(async () => ({ messageId: "fixture" })),
+}));
+vi.mock("@vercel/queue", () => ({ send: queue.send }));
 let repl: MongoMemoryReplSet;
 beforeAll(async () => {
   repl = await MongoMemoryReplSet.create({
@@ -200,5 +207,104 @@ describe("real PDF.js -> MongoDB pipeline with isolated Blob fixtures", () => {
     expect((await Account.findOne({ ownerId: book.ownerId }))?.bookSlots).toBe(
       0,
     );
+  });
+});
+
+describe("Vercel durable processing", () => {
+  it("rejects forged messages and processes simultaneous deliveries exactly once", async () => {
+    process.env.BOOKIFIED_QUEUE_SECRET = "isolated-queue-signature-test-only";
+    const doc = await PDFDocument.create();
+    doc
+      .addPage()
+      .drawText("Cloud delivery preserves the saffron harbor code 913.");
+    const { book, job } = await ingest("queue-reader", await doc.save());
+    await Job.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          status: "queued",
+          attempts: 0,
+          version: 0,
+          leaseUntil: new Date(0),
+        },
+      },
+    );
+    const jobId = job._id.toString();
+    await expect(
+      consumeProcessingMessage({ jobId, signature: "0".repeat(64) }),
+    ).rejects.toThrow("Invalid processing message");
+    expect((await Job.findById(jobId))?.attempts).toBe(0);
+    const message = { jobId, signature: jobSignature(jobId) };
+    const results = await Promise.allSettled([
+      consumeProcessingMessage(message),
+      consumeProcessingMessage(message),
+    ]);
+    expect(results.some((result) => result.status === "fulfilled")).toBe(true);
+    expect((await Job.findById(jobId))?.attempts).toBe(1);
+    expect((await Book.findById(book._id))?.status).toBe("ready");
+    await consumeProcessingMessage(message);
+    expect((await Job.findById(jobId))?.attempts).toBe(1);
+    expect(await Segment.countDocuments({ bookId: book._id })).toBe(1);
+  });
+  it("keeps a durable job after publication failure and safely republishes it", async () => {
+    const previous = process.env.VERCEL;
+    process.env.VERCEL = "1";
+    try {
+      const doc = await PDFDocument.create();
+      doc.addPage().drawText("Outbox recovery uses the jade gate code 517.");
+      const bytes = await doc.save();
+      const book = await admitBook("queue-outage", "free", {
+        title: "Recovery",
+        author: "Fixture",
+        personaId: "fixture",
+        fileSizeBytes: bytes.length,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      storage.objects.set(book.fileKey, { bytes, type: "application/pdf" });
+      book.pdfComplete = true;
+      await book.save();
+      queue.send.mockRejectedValueOnce(new Error("Isolated queue outage"));
+      await expect(enqueue(book.ownerId, book._id.toString())).rejects.toThrow(
+        "Isolated queue outage",
+      );
+      expect((await Book.findById(book._id))?.status).toBe("processing");
+      expect((await Job.findOne({ bookId: book._id }))?.status).toBe("queued");
+      await enqueue(book.ownerId, book._id.toString());
+      expect(await Job.countDocuments({ bookId: book._id })).toBe(1);
+      expect(
+        (await Account.findOne({ ownerId: book.ownerId }))?.bookSlots,
+      ).toBe(1);
+      const job = await Job.findOne({ bookId: book._id });
+      await consumeProcessingMessage({
+        jobId: job!._id.toString(),
+        signature: jobSignature(job!._id.toString()),
+      });
+      expect((await Book.findById(book._id))?.status).toBe("ready");
+    } finally {
+      if (previous === undefined) delete process.env.VERCEL;
+      else process.env.VERCEL = previous;
+    }
+  });
+  it("releases an exhausted interrupted lease and denies unauthenticated recovery", async () => {
+    const { book, job } = await ingest(
+      "queue-exhausted",
+      Buffer.from("%PDF-broken"),
+    );
+    await Job.updateOne(
+      { _id: job._id },
+      { $set: { attempts: 3, leaseUntil: new Date(0) } },
+    );
+    await consumeProcessingMessage({
+      jobId: job._id.toString(),
+      signature: jobSignature(job._id.toString()),
+    });
+    expect((await Book.findById(book._id))?.status).toBe("failed");
+    expect((await Account.findOne({ ownerId: book.ownerId }))?.bookSlots).toBe(
+      0,
+    );
+    const response = await cronMaintenance(
+      new Request("https://example.test/api/cron/maintenance"),
+    );
+    expect(response.status).toBe(401);
   });
 });

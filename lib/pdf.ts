@@ -10,6 +10,7 @@ export async function extractPdf(
     throw new AppError("PROCESSING_FAILED", "This file is not a PDF.");
   Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const deadline = Date.now() + 120000;
   const task = pdfjs.getDocument({
     data: new Uint8Array(bytes),
     useSystemFonts: true,
@@ -33,6 +34,11 @@ export async function extractPdf(
     let cover: Buffer | undefined;
     let chars = 0;
     for (let i = 1; i <= doc.numPages; i++) {
+      if (Date.now() > deadline)
+        throw new AppError(
+          "PROCESSING_FAILED",
+          "PDF exceeded the processing time limit. Try a smaller readable PDF.",
+        );
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const text = content.items

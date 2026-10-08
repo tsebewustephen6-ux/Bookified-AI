@@ -6,6 +6,7 @@ import { AppError } from "./errors";
 import { plans, type Plan } from "./plans";
 import { idSchema, metadataSchema, escapeRegex } from "./validation";
 import { voice } from "./voices";
+import { dispatchBook } from "./job-dispatch";
 export type BookDTO = {
   id: string;
   title: string;
@@ -147,7 +148,7 @@ export async function enqueue(
   plan?: Plan,
 ) {
   await connect();
-  return mongoose.connection.transaction(async (session) => {
+  const result = await mongoose.connection.transaction(async (session) => {
     const book = await Book.findOne({ _id: id, ownerId }).session(session);
     if (!book) throw new AppError("NOT_FOUND", "Book not found.", 404);
     if (book.status === "ready" || book.status === "processing")
@@ -209,6 +210,8 @@ export async function enqueue(
     );
     return dto(book);
   });
+  await dispatchBook(id, ownerId);
+  return result;
 }
 export async function retryBook(ownerId: string, id: string, plan: Plan) {
   await ownedBook(ownerId, id);
