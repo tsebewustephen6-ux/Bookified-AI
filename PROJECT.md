@@ -420,3 +420,13 @@ Keep P1/P2/P4/P5/P6 `implemented_unverified` until their real provider gates pas
 - GitHub main repair commit: 186f9812a26fd4660ff99fbefb027eafc12fffe5. New production deployment: dpl_F7aFGgXutUXM1DSxuKSXQJkrUzHF. Hosted status pending.
 - Earlier build-log access blocker was bypassed by user-supplied logs. Secret transfer approval remains unanswered, and no encrypted environment settings have been written. Hosted authentication may remain in the safe setup state. Persistent worker, verified Vapi configuration, and real billing remain external/acceptance blockers.
 - Next action: check the new hosted status; repair any newly evidenced failure, then inspect hosted public pages and update this checkpoint with final status.
+
+### Final hosted deployment checkpoint — 2026-10-08
+
+- Vercel production deployment dpl_F7aFGgXutUXM1DSxuKSXQJkrUzHF is READY. Production URL: https://bookified-beige-six.vercel.app. Hosted commit: 186f9812a26fd4660ff99fbefb027eafc12fffe5. Next.js 16.4.0 on Node 24; reported build interval approximately 72 seconds.
+- Source and lockfile are stored in private https://github.com/Stevetheguy/Bookified. Local and remote histories differ because GitHub connector publication created a source snapshot; no force push.
+- Verified locally: 35 unit/integration tests, five production browser checks, lint without warnings, strict types, production build, clean-install dry run, MongoDB read-only connectivity, zero production dependency advisories. Phone and desktop screenshots inspected.
+- Hosted page/runtime observation remains unverified: deployment protection fetch returned 403; a direct public HTTP probe did not return promptly. No success is claimed for hosted sign-in, upload, callbacks, billing or acoustic voice.
+- No environment settings were transferred after automatic approval review rejected the secret-reading method. User approval for a non-printing encrypted transfer remains pending; alternatively configure .env.example settings directly in Vercel. Set APP_BASE_URL and BETTER_AUTH_URL to the final production HTTPS origin.
+- Next required setup: secure hosted environment configuration; persistent supervised Node 24 worker using the same database/storage/voice settings; valid verified Vapi assistant/model/voices; actual verified billing integration. Paid-plan self-grant was removed and remains blocked.
+- Final Next.js feedback reporting pass: no qualifying Next.js-specific candidate retained; the install friction was npm optional runtime lock resolution.
