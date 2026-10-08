@@ -27,6 +27,7 @@ jobs:
         run: |
           npx cap add ios || true
           npx cap sync ios
+          npx capacitor-assets generate --ios --iconBackgroundColor '#FDFBF7' --splashBackgroundColor '#FDFBF7'
 
       - name: Build iOS App
         run: |

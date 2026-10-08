@@ -10,6 +10,8 @@ import { currentOwner } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
+import { MobileOnboarding } from "@/components/mobile-onboarding";
+
 export default async function Home() {
   const owner = await currentOwner();
 
@@ -19,6 +21,7 @@ export default async function Home() {
 
   return (
     <>
+      <MobileOnboarding />
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Plus, ArrowUpRight, LogOut, User as UserIcon } from "lucide-react";
 import { Brand } from "./brand";
 import { signOut } from "@/lib/auth-client";
+import { Capacitor } from "@capacitor/core";
 import { useState, useRef, useEffect } from "react";
 
 export function Navigation({
@@ -17,8 +18,10 @@ export function Navigation({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isNative, setIsNative] = useState(false);
 
   useEffect(() => {
+    setIsNative(Capacitor.isNativePlatform());
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
@@ -42,6 +45,33 @@ export function Navigation({
 
   const displayName = user?.name || user?.email?.split("@")[0] || "Reader";
   const initial = displayName[0]?.toUpperCase() || "R";
+
+  if (isNative) {
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-[9999] flex justify-around items-center pb-[max(0.8rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        {user ? (
+          <>
+            <Link href="/library" className={`flex flex-col items-center gap-1 ${path === "/library" ? "text-[#745444]" : "text-gray-400"}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+              <span className="text-[10px] font-medium">Library</span>
+            </Link>
+            <Link href="/subscriptions" className={`flex flex-col items-center gap-1 ${path === "/subscriptions" ? "text-[#745444]" : "text-gray-400"}`}>
+              <UserIcon size={24} />
+              <span className="text-[10px] font-medium">Account</span>
+            </Link>
+            <button onClick={handleSignOut} className="flex flex-col items-center gap-1 text-gray-400">
+              <LogOut size={24} />
+              <span className="text-[10px] font-medium">Sign out</span>
+            </button>
+          </>
+        ) : (
+          <Link href="/sign-in" className="flex items-center justify-center w-full px-6 py-2">
+            <span className="bg-[#2A2626] text-white px-8 py-3 rounded-full font-medium w-full text-center">Sign in</span>
+          </Link>
+        )}
+      </nav>
+    );
+  }
 
   return (
     <header className="site-header">
