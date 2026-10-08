@@ -17,6 +17,7 @@ export default async function Home() {
   const owner = await currentOwner();
   const headersList = await headers();
   const userAgent = headersList.get("user-agent") || "";
+  console.log("USER AGENT IS:", userAgent);
   const isNative = userAgent.includes("BookifiedMobileApp");
 
   if (owner) {
