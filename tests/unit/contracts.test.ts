@@ -150,6 +150,31 @@ describe("boundary controls", () => {
     ).rejects.toThrow("too large");
     expect(secretEqual("secret", "secreT")).toBe(false);
   });
+  it("groups assistant fragments while preserving replay deduplication and user turns", () => {
+    const event = (
+      id: string,
+      text: string,
+      role: "assistant" | "user" = "assistant",
+    ) => ({
+      type: "transcript",
+      transcriptType: "final",
+      role,
+      transcript: text,
+      id,
+    });
+    let messages = appendTranscript([], event("a1", "One moment."));
+    messages = appendTranscript(messages, event("a2", "I found the passage."));
+    messages = appendTranscript(messages, event("a2", "I found the passage."));
+    expect(messages).toHaveLength(1);
+    expect(messages[0].text).toBe("One moment. I found the passage.");
+    messages = appendTranscript(messages, event("u1", "Which page?", "user"));
+    messages = appendTranscript(messages, event("a3", "Page two."));
+    expect(messages.map((m) => m.role)).toEqual([
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+  });
   it("keeps partials separate and deduplicates repeated finals", () => {
     let messages = appendTranscript([], {
       type: "transcript",

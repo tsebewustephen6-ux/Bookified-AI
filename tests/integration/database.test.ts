@@ -27,9 +27,9 @@ import { retrieve } from "../../lib/retrieval";
 import { failJob } from "../../lib/processing";
 import {
   createCall,
-  reconcileCall,
   webhookSession,
   recoverCall,
+  stopCall,
 } from "../../lib/vapi";
 import { GET as processingStatus } from "../../app/api/books/[id]/processing/route";
 import { POST as retryRoute } from "../../app/api/books/[id]/retry/route";
@@ -493,7 +493,6 @@ describe("provider fixtures with real admission and endpoint authorization", () 
       ),
     ).rejects.toThrow("Unknown");
     lifecycle.started = new Date().toISOString();
-    await reconcileCall(sessionId);
     const toolBody = {
       message: {
         type: "tool-calls",
@@ -529,6 +528,65 @@ describe("provider fixtures with real admission and endpoint authorization", () 
     expect(tools.map((t) => t.toolCallId)).toEqual(["tool-one", "tool-two"]);
     expect(tools[0].result).toContain("739");
     expect(tools[1].result).toContain("UNAUTHORIZED");
+    expect((await VoiceSession.findById(record._id))?.status).toBe("active");
+    const nested = await toolRoute(
+      providerRequest(
+        "/api/vapi/search-book",
+        {
+          message: {
+            type: "tool-calls",
+            call: { id: callId },
+            toolCallList: [
+              {
+                id: "nested-object",
+                type: "function",
+                function: {
+                  name: "search_book",
+                  arguments: { query: "Velorinth" },
+                },
+              },
+              {
+                id: "nested-json",
+                type: "function",
+                function: {
+                  name: "search_book",
+                  arguments: JSON.stringify({ query: "Velorinth" }),
+                },
+              },
+              {
+                id: "nested-invalid",
+                type: "function",
+                function: { name: "search_book", arguments: "{" },
+              },
+              {
+                id: "nested-foreign",
+                type: "function",
+                function: {
+                  name: "search_book",
+                  arguments: {
+                    query: "Velorinth",
+                    bookId: new mongoose.Types.ObjectId().toString(),
+                  },
+                },
+              },
+            ],
+          },
+        },
+        capability,
+      ),
+    );
+    expect(nested.status).toBe(200);
+    const nestedResults = resultSchema.parse(await nested.json()).results;
+    expect(nestedResults.map((t) => t.toolCallId)).toEqual([
+      "nested-object",
+      "nested-json",
+      "nested-invalid",
+      "nested-foreign",
+    ]);
+    expect(nestedResults[0].result).toContain("739");
+    expect(nestedResults[1].result).toContain("739");
+    expect(nestedResults[2].result).toContain("VALIDATION");
+    expect(nestedResults[3].result).toContain("UNAUTHORIZED");
     lifecycle.ended = new Date(Date.now() + 2000).toISOString();
     for (const type of [
       "end-of-call-report",
@@ -555,6 +613,52 @@ describe("provider fixtures with real admission and endpoint authorization", () 
         )
       ).status,
     ).toBe(403);
+  });
+  it("confirms a concurrent browser disconnect after rejected stop control without hiding an active call", async () => {
+    configureVapi();
+    const book = await ready("stop-race-owner");
+    const record = await reserveSession(
+      book.ownerId,
+      book._id.toString(),
+      "free",
+      crypto.randomUUID(),
+    );
+    record.providerCallId = crypto.randomUUID();
+    await record.save();
+    let ended = false;
+    let disconnectOnControl = false;
+    const startedAt = new Date().toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("control.vapi.ai")) {
+          ended = disconnectOnControl;
+          return new Response(null, { status: 410 });
+        }
+        return Response.json({
+          id: record.providerCallId,
+          status: ended ? "ended" : "in-progress",
+          startedAt,
+          endedAt: ended
+            ? new Date(Date.now() + 2000).toISOString()
+            : undefined,
+          monitor: { controlUrl: "https://control.vapi.ai/end" },
+          assistantOverrides: {
+            metadata: { bookifiedSessionId: record._id.toString() },
+          },
+        });
+      }),
+    );
+    await expect(stopCall(record._id.toString())).rejects.toThrow(
+      "stop is pending",
+    );
+    expect((await VoiceSession.findById(record._id))?.status).toBe("active");
+    disconnectOnControl = true;
+    await expect(stopCall(record._id.toString())).resolves.toBeUndefined();
+    await expect(stopCall(record._id.toString())).resolves.toBeUndefined();
+    expect((await VoiceSession.findById(record._id))?.status).toBe("ended");
+    expect((await Usage.findOne({ ownerId: book.ownerId }))?.connected).toBe(1);
+    expect((await Usage.findOne({ ownerId: book.ownerId }))?.reserved).toBe(0);
   });
   it("expires tool authorization and releases startup failure without counting it", async () => {
     configureVapi();

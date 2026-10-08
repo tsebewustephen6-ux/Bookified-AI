@@ -4,6 +4,8 @@ export type TranscriptMessage = {
   role: "user" | "assistant";
   text: string;
   final: boolean;
+  eventIds?: string[];
+  lastFragment?: string;
 };
 const schema = z.object({
   type: z.literal("transcript"),
@@ -31,14 +33,37 @@ export function appendTranscript(
   if (
     final &&
     (eventId
-      ? messages.some((m) => m.final && m.id === eventId)
-      : lastFinal?.role === data.role && lastFinal.text === data.transcript)
+      ? messages.some(
+          (m) => m.final && (m.id === eventId || m.eventIds?.includes(eventId)),
+        )
+      : lastFinal?.role === data.role &&
+        (lastFinal.lastFragment ?? lastFinal.text) === data.transcript)
   )
     return messages;
   const identity = eventId || `${data.role}:${Date.now()}:${messages.length}`;
   const withoutPartial = messages.filter(
     (m) => m.final || m.role !== data.role,
   );
+  const previous = withoutPartial.at(-1);
+  if (
+    final &&
+    data.role === "assistant" &&
+    previous?.final &&
+    previous.role === "assistant" &&
+    previous.text.length + data.transcript.length + 1 <= 30000
+  ) {
+    return [
+      ...withoutPartial.slice(0, -1),
+      {
+        ...previous,
+        text: previous.text + " " + data.transcript.trim(),
+        lastFragment: data.transcript,
+        eventIds: [...(previous.eventIds ?? [previous.id]), identity].slice(
+          -200,
+        ),
+      },
+    ];
+  }
   return [
     ...withoutPartial.slice(-199),
     {

@@ -394,19 +394,34 @@ export async function stopCall(sessionId: string) {
       "Provider control URL is invalid.",
       503,
     );
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "end-call" }),
-    signal: AbortSignal.timeout(10000),
-    redirect: "error",
-  });
-  if (!response.ok)
+  let accepted = false;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "end-call" }),
+      signal: AbortSignal.timeout(10000),
+      redirect: "error",
+    });
+    accepted = response.ok;
+  } catch {
+    // A closed control connection may also mean the browser already ended it.
+  }
+  if (!accepted) {
+    // Disconnecting browser audio can end the call between GET and control POST.
+    // A failed control request is successful only after a bound provider recheck
+    // confirms termination; outages and still-active calls remain retryable.
+    for (const delay of [0, 500, 1500]) {
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      const latest = await reconcileCall(sessionId);
+      if (latest?.endedAt || latest?.status === "ended") return;
+    }
     throw new AppError(
       "PROVIDER_UNAVAILABLE",
       "Conversation stop is pending. Try again.",
       503,
     );
+  }
 }
 export async function webhookSession(request: Request, callId: string) {
   if (
