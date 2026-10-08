@@ -41,7 +41,7 @@ export function MobileOnboarding() {
           </p>
         </div>
 
-        <Button asChild size="lg" className="w-full h-14 text-lg rounded-full bg-[#2A2626] text-white hover:bg-[#4A4545] shadow-lg mt-2">
+        <Button asChild className="w-full h-14 text-lg rounded-full bg-[#2A2626] text-white hover:bg-[#4A4545] shadow-lg mt-2">
           <Link href="/sign-in" className="flex items-center justify-center gap-2">
             Start your story
             <ArrowRight size={20} />
