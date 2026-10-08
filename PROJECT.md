@@ -412,3 +412,11 @@ Execute against development/test providers and record actual results here:
 7. Inspect authenticated upload, processing, library, conversation, and plans at phone/tablet/desktop sizes and with keyboard; capture console/server errors and fix regressions. Verify hosted worker restart/lease recovery, private object access and final production container build.
 
 Keep P1/P2/P4/P5/P6 `implemented_unverified` until their real provider gates pass. Update this checkpoint with commands/results, concrete provider response evidence without secrets, any defects, and the next action. Only then evaluate the contract's final release acceptance.
+
+### Deployment repair checkpoint — 2026-10-08
+
+- User supplied hosted npm logs: missing @emnapi/core@1.11.3 and @emnapi/runtime@1.11.3 lock entries. Windows npm 11.6.2 and Linux-target dry runs did not detect the omitted optional-platform entries. Clean lock-only regeneration also omitted them.
+- Added exact build-support dev dependencies for those two runtimes and regenerated the lock with npm; no framework upgrades, install-command bypass, force install or test weakening. The final delta adds only root declarations and required runtime entries. npm ci dry run passes and the local production build passes.
+- GitHub main repair commit: 186f9812a26fd4660ff99fbefb027eafc12fffe5. New production deployment: dpl_F7aFGgXutUXM1DSxuKSXQJkrUzHF. Hosted status pending.
+- Earlier build-log access blocker was bypassed by user-supplied logs. Secret transfer approval remains unanswered, and no encrypted environment settings have been written. Hosted authentication may remain in the safe setup state. Persistent worker, verified Vapi configuration, and real billing remain external/acceptance blockers.
+- Next action: check the new hosted status; repair any newly evidenced failure, then inspect hosted public pages and update this checkpoint with final status.
