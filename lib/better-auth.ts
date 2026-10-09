@@ -61,5 +61,5 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: ["bookified://", "http://10.70.22.83:3000", "exp://10.70.22.83:8081", "http://10.70.22.83:8081"],
+  trustedOrigins: ["bookified://", "http://10.70.22.83:3000", "exp://10.70.22.83:8081", "exp://10.70.22.83:8081/--/", "http://10.70.22.83:8081"],
 });
