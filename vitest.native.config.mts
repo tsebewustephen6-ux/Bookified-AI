@@ -8,5 +8,5 @@ export default defineConfig({
     { find: /^react-dom\/client$/, replacement: mobilePackage('react-dom/client.js') },
     ...['react-native', 'expo-secure-store', 'expo-crypto', 'expo-web-browser'].map(name => ({ find: name, replacement: mobilePackage(name) })),
   ] },
-  test: { include: ['tests/native/**/*.test.tsx'], environment: 'jsdom', fileParallelism: false },
+  test: { include: ['mobile/tests/**/*.test.tsx'], environment: 'jsdom', fileParallelism: false },
 });
