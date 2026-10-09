@@ -4,7 +4,8 @@ import { baseUrl } from "./env";
 import { connect } from "../database/connection";
 import { Rate } from "../database/models";
 export function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
+  let origin = request.headers.get("origin");
+  if (origin === "null") origin = null;
   const referer = request.headers.get("referer");
   const base = baseUrl().origin;
   
@@ -12,9 +13,6 @@ export function sameOrigin(request: Request) {
     if (origin !== base) throw new AppError("UNAUTHORIZED", "Please submit this request from Bookified.", 403);
   } else if (referer) {
     if (!referer.startsWith(base)) throw new AppError("UNAUTHORIZED", "Please submit this request from Bookified.", 403);
-  } else {
-    // If both are missing, some strict browsers might drop them. We should probably allow it or rely on the cookies.
-    // For mobile webviews, we will allow it if neither is present.
   }
 }
 export function secretEqual(a: string, b: string) {
