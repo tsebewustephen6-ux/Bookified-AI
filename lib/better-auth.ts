@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { bearer, oneTimeToken } from "better-auth/plugins";
+import { expo } from "@better-auth/expo";
 import { MongoClient, type Db } from "mongodb";
 
 const globalMongo = globalThis as typeof globalThis & {
@@ -27,7 +28,11 @@ const client = getMongoClient();
 const db = getAuthDb();
 
 export const auth = betterAuth({
-  plugins: [bearer({ requireSignature: true }), oneTimeToken({ disableClientRequest: true, storeToken: "hashed", expiresIn: 2 })],
+  plugins: [
+    bearer({ requireSignature: true }), 
+    oneTimeToken({ disableClientRequest: true, storeToken: "hashed", expiresIn: 2 }),
+    expo()
+  ],
   database: mongodbAdapter(db, { client }),
   secret:
     process.env.BETTER_AUTH_SECRET ||
@@ -56,4 +61,5 @@ export const auth = betterAuth({
       },
     },
   },
+  trustedOrigins: ["bookified://", "http://10.70.22.83:3000", "exp://10.70.22.83:8081", "http://10.70.22.83:8081"],
 });
