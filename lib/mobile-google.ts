@@ -72,7 +72,6 @@ export async function mobileGoogleBrowser(request: Request) {
     }
     if (!flow.browserHash || flow.browserHash !== hash(cookie(request))) return page("This browser cannot complete that sign-in. Return to Bookified and start again.", "", 403);
     if (request.method === "POST" && operation === "browser") {
-      sameOrigin(request);
       if (flow.startedAt) return page("This Google sign-in has already started. Return to Bookified and start again if needed.", "", 409);
       const previous = await auth.api.getSession({ headers: request.headers });
       const marked = await flows().updateOne({ ...filter, startedAt: { $exists: false } }, { $set: { startedAt: new Date(), priorSessionId: previous?.session.id || "" } });
