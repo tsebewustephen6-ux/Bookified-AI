@@ -4,7 +4,7 @@ import { identity } from "@/lib/auth";
 import { ownedBook } from "@/lib/books";
 import { sameOrigin, body, rateLimit } from "@/lib/security";
 import { AppError, failure } from "@/lib/errors";
-import { required } from "@/lib/env";
+import { required, baseUrl } from "@/lib/env";
 import { Book } from "@/database/models";
 import { connect } from "@/database/connection";
 import { verifyStored } from "@/lib/storage";
@@ -61,6 +61,7 @@ export async function POST(request: Request) {
             403,
           );
         return {
+          callbackUrl: new URL("/api/upload", baseUrl()).href,
           allowedContentTypes: [
             isPdf ? "application/pdf" : book.expectedCoverType!,
           ],

@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import type Vapi from "@vapi-ai/web";
 import { z } from "zod";
-import { api, ApiError } from "@/lib/client-api";
-import { appendTranscript, type TranscriptMessage } from "@/lib/transcripts";
+import { api, ApiError } from "../lib/client-api";
+import { appendTranscript, type TranscriptMessage } from "../lib/transcripts";
 export type VoiceState =
   | "idle"
   | "connecting"
@@ -31,7 +31,7 @@ const statusSchema = z.object({
     }),
   ),
 });
-export function useVoice(bookId: string, limit: number) {
+export function useVoice(bookId: string, limit: number, request: typeof api = api) {
   const [state, setState] = useState<VoiceState>("idle");
   const [error, setError] = useState("");
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
@@ -71,7 +71,7 @@ export function useVoice(bookId: string, limit: number) {
     if (sessionId.current) {
       admissionKey.current = null;
       try {
-        await api(
+        await request(
           `/api/sessions/${sessionId.current}`,
           z.object({ stopping: z.boolean() }),
           { method: "POST" },
@@ -98,12 +98,12 @@ export function useVoice(bookId: string, limit: number) {
       sdk?.removeAllListeners();
       if (sdk) void Promise.resolve(sdk.stop()).catch(() => {});
       if (sessionId.current)
-        void fetch(`/api/sessions/${sessionId.current}`, {
+        void request(`/api/sessions/${sessionId.current}`, z.object({ stopping: z.boolean() }), {
           method: "POST",
           keepalive: true,
         }).catch(() => {});
     },
-    [bookId],
+    [bookId, request],
   );
   async function start() {
     if (running.current || stopping.current) return;
@@ -124,7 +124,7 @@ export function useVoice(bookId: string, limit: number) {
       });
       permission.getTracks().forEach((track) => track.stop());
       if (attempt !== generation.current) return;
-      const admission = await api(
+      const admission = await request(
         `/api/books/${bookId}/sessions`,
         admissionSchema,
         {
@@ -135,7 +135,7 @@ export function useVoice(bookId: string, limit: number) {
         },
       );
       if (attempt !== generation.current) {
-        void fetch(`/api/sessions/${admission.sessionId}`, {
+          void request(`/api/sessions/${admission.sessionId}`, z.object({ stopping: z.boolean() }), {
           method: "POST",
           keepalive: true,
         }).catch(() => {});
@@ -211,7 +211,7 @@ export function useVoice(bookId: string, limit: number) {
       async function poll() {
         if (!live()) return;
         try {
-          const status = await api(
+          const status = await request(
             `/api/sessions/${admission.sessionId}`,
             statusSchema,
           );

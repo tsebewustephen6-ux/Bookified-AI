@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import { bearer } from "better-auth/plugins";
 import { MongoClient, type Db } from "mongodb";
 
 const globalMongo = globalThis as typeof globalThis & {
@@ -26,6 +27,7 @@ const client = getMongoClient();
 const db = getAuthDb();
 
 export const auth = betterAuth({
+  plugins: [bearer({ requireSignature: true })],
   database: mongodbAdapter(db, { client }),
   secret:
     process.env.BETTER_AUTH_SECRET ||

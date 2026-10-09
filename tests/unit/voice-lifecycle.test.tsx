@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, renderHook, cleanup } from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 import { useVoice } from "../../hooks/use-voice";
+import type { api } from "../../lib/client-api";
 type FixtureSdk = {
   emit: (name: string, payload?: unknown) => boolean;
   listenerCount: (name: string) => number;
@@ -122,6 +123,31 @@ it("microphone denial never reserves a provider call", async () => {
   expect(result.current.error).toContain("denied");
   expect(fetch).not.toHaveBeenCalled();
   expect(fixture.clients).toHaveLength(0);
+});
+it("uses the injected native transport to stop an admission that returns after navigation", async () => {
+  const calls: string[] = [];
+  let release: (value: unknown) => void = () => {};
+  let admitted: () => void = () => {};
+  const waiting = new Promise<void>((resolve) => { admitted = resolve; });
+  const transport: typeof api = async (path, schema) => {
+    calls.push(path);
+    if (path.endsWith('/sessions')) {
+      const result = new Promise<unknown>((resolve) => { release = resolve; });
+      admitted();
+      return schema.parse(await result);
+    }
+    return schema.parse({ stopping: true });
+  };
+  const { result, unmount } = renderHook(() => useVoice('native-book', 300, transport));
+  await act(async () => {
+    const starting = result.current.start();
+    await waiting;
+    unmount();
+    release({ sessionId: 'native-session', id: 'native-call', webCallUrl: 'https://fixture.daily.co/join', maxDurationSeconds: 300 });
+    await starting;
+  });
+  expect(calls).toEqual(['/api/books/native-book/sessions', '/api/sessions/native-session']);
+  expect(fetch).not.toHaveBeenCalled();
 });
 it("provider errors clear listeners, finalize once and allow a clean restart", async () => {
   const { result } = renderHook(() => useVoice("book-fixture", 300));
