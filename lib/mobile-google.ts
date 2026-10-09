@@ -63,7 +63,10 @@ export async function mobileGoogleBrowser(request: Request) {
         const claimed = await flows().updateOne({ ...filter, browserHash: { $exists: false } }, { $set: { browserHash: hash(binding) } });
         if (!claimed.modifiedCount) return page("This sign-in is already open in another browser. Return to Bookified and start again.", "", 409);
       } else if (flow.browserHash !== hash(binding)) return page("Use the browser where this sign-in started.", "", 403);
-      const response = page("Sign in to the same Google account you use on the Bookified website. After signing in, close this browser to return to the app.", `<form method="post" action="${browserUrl(flowId)}"><button style="background:#795744;color:white;border:0;border-radius:24px;padding:16px 24px;font:inherit">Continue with Google</button></form>`);
+      const response = page(
+        "Redirecting to Google...",
+        `<form method="post" action="${browserUrl(flowId)}"><noscript><button style="background:#795744;color:white;border:0;border-radius:24px;padding:16px 24px;font:inherit">Continue with Google</button></noscript></form><script>document.forms[0].submit();</script>`
+      );
       response.headers.append("Set-Cookie", `${cookieName}=${binding}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; Secure; SameSite=Lax`);
       return response;
     }
