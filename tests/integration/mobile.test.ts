@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
-import { MongoClient } from 'mongodb';
+import { MongoClient, type Db } from 'mongodb';
 import mongoose from 'mongoose';
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
-import { bearer } from 'better-auth/plugins';
+import { bearer, oneTimeToken } from 'better-auth/plugins';
+import { createHash, randomBytes } from 'node:crypto';
+import { mobileGoogleBrowser } from '../../lib/mobile-google';
 import { connect } from '../../database/connection';
 import { models, Book } from '../../database/models';
 import { mobileHandler } from '../../lib/mobile-api';
@@ -13,15 +15,23 @@ import { POST as websiteAdmission } from '../../app/api/books/route';
 
 type FixtureAuth = {
   handler: (request: Request) => Promise<Response>;
-  api: { getSession: (options: { headers: Headers }) => Promise<{ user: { id: string; name: string; email: string } } | null> };
+  api: {
+    getSession: (options: { headers: Headers }) => Promise<{ user: { id: string; name: string; email: string } } | null>;
+    generateOneTimeToken: (options: { headers: Headers }) => Promise<{ token: string }>;
+    verifyOneTimeToken: (options: { body: { token: string }; asResponse: true }) => Promise<Response>;
+  };
 };
-const state = vi.hoisted(() => ({ headers: new Headers(), auth: null as FixtureAuth | null }));
+const state = vi.hoisted(() => ({ headers: new Headers(), auth: null as FixtureAuth | null, db: null as Db | null }));
 vi.mock('server-only', () => ({}));
 vi.mock('next/headers', () => ({ headers: async () => state.headers }));
 vi.mock('../../lib/better-auth', () => ({ auth: {
   handler: (request: Request) => state.auth!.handler(request),
-  api: { getSession: (options: { headers: Headers }) => state.auth!.api.getSession(options) },
-} }));
+  api: {
+    getSession: (options: { headers: Headers }) => state.auth!.api.getSession(options),
+    generateOneTimeToken: (options: { headers: Headers }) => state.auth!.api.generateOneTimeToken(options),
+    verifyOneTimeToken: (options: { body: { token: string }; asResponse: true }) => state.auth!.api.verifyOneTimeToken(options),
+  },
+}, getAuthDb: () => state.db! }));
 let mongo: MongoMemoryReplSet;
 let client: MongoClient;
 const origin = 'https://bookified.example';
@@ -48,19 +58,77 @@ beforeAll(async () => {
   process.env.MONGODB_URI = mongo.getUri('mobile-fixture');
   process.env.APP_BASE_URL = origin;
   process.env.BETTER_AUTH_SECRET = 'isolated-mobile-auth-secret-at-least-32-characters';
+  process.env.GOOGLE_CLIENT_ID = 'synthetic-google-client';
+  process.env.GOOGLE_CLIENT_SECRET = 'synthetic-google-secret';
   process.env.MOBILE_WEB_ORIGINS = 'http://localhost:8082';
   process.env.VOICE_CATALOG_JSON = JSON.stringify([{ id: 'fixture', name: 'Fixture', description: 'Test voice', provider: 'openai', voiceId: 'alloy' }]);
   client = new MongoClient(process.env.MONGODB_URI);
   await client.connect();
+  state.db = client.db();
   state.auth = betterAuth({ baseURL: origin, secret: process.env.BETTER_AUTH_SECRET,
     database: mongodbAdapter(client.db(), { client }), emailAndPassword: { enabled: true },
-    plugins: [bearer({ requireSignature: true })],
+    socialProviders: { google: { clientId: 'synthetic-google-client', clientSecret: 'synthetic-google-secret' } },
+    plugins: [bearer({ requireSignature: true }), oneTimeToken({ disableClientRequest: true, storeToken: 'hashed', expiresIn: 2 })],
   });
   await connect();
   await Promise.all(models.map((model) => model.init()));
 });
 afterAll(async () => { await mongoose.disconnect(); await client?.close(); await mongo?.stop(); });
 describe('native signed sessions and shared backend', () => {
+  it('binds Google handoff to PKCE, browser consent and a fresh session, then consumes it once', async () => {
+    const verifier = randomBytes(32).toString('hex');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const started = await call('auth/google/start', undefined, { challenge });
+    expect(started.status).toBe(200);
+    const { flowId, browserUrl } = await started.json();
+    expect(new URL(browserUrl).origin).toBe(origin);
+    const browser = await mobileGoogleBrowser(new Request(browserUrl));
+    expect(browser.status).toBe(200);
+    expect(browser.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+    const browserCookie = browser.headers.get('set-cookie')!.split(';')[0];
+    expect(await browser.text()).toContain('Continue with Google');
+    const pending = await call('auth/google/exchange', undefined, { flowId, verifier });
+    expect(await pending.json()).toEqual({ status: 'pending' });
+    expect((await call('auth/google/exchange', undefined, { flowId, verifier: randomBytes(32).toString('hex') })).status).toBe(401);
+    const finish = origin + '/api/mobile/oauth?operation=finish&flow=' + flowId;
+    expect((await mobileGoogleBrowser(new Request(finish))).status).toBe(403);
+    const oldAuth = await state.auth!.handler(new Request(origin + '/api/auth/sign-up/email', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'old', email: 'google-old@fixture.example', password }) }));
+    const oldCookie = oldAuth.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + oldCookie } }))).status).toBe(401);
+    const csrf = await mobileGoogleBrowser(new Request(browserUrl, { method: 'POST', headers: { Cookie: browserCookie } }));
+    expect(csrf.status).toBe(403);
+    const redirect = await mobileGoogleBrowser(new Request(browserUrl, { method: 'POST', headers: { Origin: origin, Cookie: browserCookie + '; ' + oldCookie } }));
+    expect(redirect.status).toBe(303);
+    expect(new URL(redirect.headers.get('location')!).hostname).toBe('accounts.google.com');
+    expect(redirect.headers.getSetCookie().length).toBeGreaterThan(0);
+    expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + oldCookie } }))).status).toBe(401);
+    // A fresh real auth session stands in for Google's callback; no provider login is fabricated.
+    const fresh = await state.auth!.handler(new Request(origin + '/api/auth/sign-up/email', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Google fixture', email: 'google-fresh@fixture.example', password }) }));
+    const freshCookie = fresh.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + freshCookie } }));
+    expect(completed.status).toBe(200);
+    expect(await completed.text()).toContain('Google sign-in is complete');
+    const exchanged = await call('auth/google/exchange', undefined, { flowId, verifier });
+    expect(exchanged.status).toBe(200);
+    expect(exchanged.headers.get('set-cookie')).toBeNull();
+    const result = await exchanged.json();
+    expect(result.status).toBe('ready');
+    expect(result.token).toContain('.');
+    expect((await call('account', result.token)).status).toBe(200);
+    expect((await call('auth/google/exchange', undefined, { flowId, verifier })).status).toBe(401);
+  });
+  it('expires and rejects cancelled Google handoffs without consuming another flow', async () => {
+    const verifier = randomBytes(32).toString('hex');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const start = await call('auth/google/start', undefined, { challenge });
+    const { flowId } = await start.json();
+    await state.db!.collection('mobileOauthFlows').updateOne({ _id: flowId }, { $set: { failed: true } });
+    expect((await call('auth/google/exchange', undefined, { flowId, verifier })).status).toBe(400);
+    const again = await call('auth/google/start', undefined, { challenge });
+    const expired = (await again.json()).flowId;
+    await state.db!.collection('mobileOauthFlows').updateOne({ _id: expired }, { $set: { expiresAt: new Date(0) } });
+    expect((await call('auth/google/exchange', undefined, { flowId: expired, verifier })).status).toBe(401);
+  });
   it('rejects cookie-only, unsigned and forged bearer sessions; revoked sessions stop working', async () => {
     const user = await register('signed');
     expect((await call('account', undefined, undefined, { cookie: 'better-auth.session_token=' + user.token })).status).toBe(401);

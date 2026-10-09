@@ -7,6 +7,7 @@ import { entitlement } from "./auth";
 import { usageSummary } from "./sessions";
 import { plans } from "./plans";
 import { voices } from "./voices";
+import { mobileGoogle } from "./mobile-google";
 import { POST as admit } from "../app/api/books/route";
 import { POST as upload } from "../app/api/upload/route";
 import { GET as processing } from "../app/api/books/[id]/processing/route";
@@ -39,6 +40,8 @@ async function dispatch(request: Request, segments: string[]): Promise<Response>
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (!authConfigured()) throw new AppError("PROVIDER_UNAVAILABLE", "Sign-in service is not configured.", 503);
   const path = segments.join("/");
+  if (request.method === "POST" && path === "auth/google/start") return mobileGoogle(request, "start");
+  if (request.method === "POST" && path === "auth/google/exchange") return mobileGoogle(request, "exchange");
   const headers = new Headers(request.headers);
   // Native requests carry a signed session token, never ambient website cookies.
   headers.delete("cookie");
