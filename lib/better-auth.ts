@@ -38,7 +38,7 @@ export const auth = betterAuth({
   baseURL:
     process.env.BETTER_AUTH_URL ||
     process.env.APP_BASE_URL ||
-    "http://localhost:3000",
+    (process.env.VERCEL_URL ? "https://bookified-beige-six.vercel.app" : "http://localhost:3000"),
   rateLimit: { enabled: true, storage: "database" },
   emailAndPassword: {
     enabled: true,
