@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth, getAuthDb } from "./better-auth";
 import { baseUrl } from "./env";
 import { AppError, failure } from "./errors";
-import { body, rateLimit, sameOrigin } from "./security";
+import { body, rateLimit } from "./security";
 
 type Flow = { _id: string; challenge: string; expiresAt: Date; browserHash?: string; ott?: string; failed?: boolean; startedAt?: Date; priorSessionId?: string };
 const hash = (value: string) => createHash("sha256").update(value).digest("base64url");
@@ -63,13 +63,9 @@ export async function mobileGoogleBrowser(request: Request) {
         const claimed = await flows().updateOne({ ...filter, browserHash: { $exists: false } }, { $set: { browserHash: hash(binding) } });
         if (!claimed.modifiedCount) return page("This sign-in is already open in another browser. Return to Bookified and start again.", "", 409);
       } else if (flow.browserHash !== hash(binding)) return page("Use the browser where this sign-in started.", "", 403);
-      const response = page("Sign in to the same Google account you use on the Bookified website. After signing in, close this browser to return to the app.", `<form method="post" action="${browserUrl(flowId)}"><button style="background:#795744;color:white;border:0;border-radius:24px;padding:16px 24px;font:inherit">Continue with Google</button></form>`);
-      response.headers.append("Set-Cookie", `${cookieName}=${binding}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; Secure; SameSite=Lax`);
-      return response;
-    }
-    if (!flow.browserHash || flow.browserHash !== hash(cookie(request))) return page("This browser cannot complete that sign-in. Return to Bookified and start again.", "", 403);
-    if (request.method === "POST" && operation === "browser") {
-      sameOrigin(request);
+      // The native button already starts an expiring, verifier-bound flow.
+      // Set the browser/OAuth cookies and redirect immediately to Google.
+      // No website form POST or mobile-browser Origin header is required.
       if (flow.startedAt) return page("This Google sign-in has already started. Return to Bookified and start again if needed.", "", 409);
       const previous = await auth.api.getSession({ headers: request.headers });
       const marked = await flows().updateOne({ ...filter, startedAt: { $exists: false } }, { $set: { startedAt: new Date(), priorSessionId: previous?.session.id || "" } });
@@ -77,16 +73,18 @@ export async function mobileGoogleBrowser(request: Request) {
       const callback = browserUrl(flowId, "finish");
       const result = await auth.handler(new Request(new URL("/api/auth/sign-in/social", baseUrl()), {
         method: "POST", headers: { "Content-Type": "application/json", Origin: baseUrl().origin, Cookie: request.headers.get("cookie") || "" },
-        body: JSON.stringify({ provider: "google", callbackURL: callback.toString(), errorCallbackURL: callback + "&failed=1" }),
+        body: JSON.stringify({ provider: "google", callbackURL: callback.toString(), errorCallbackURL: callback + "&failed=1", additionalParams: { prompt: "select_account" } }),
       }));
       if (!result.ok) return page("Google sign-in could not start. Return to Bookified and try again.", "", 502);
       const data = await result.json();
       const target = new URL(data.url);
       if (target.protocol !== "https:" || target.hostname !== "accounts.google.com") throw new AppError("PROVIDER_UNAVAILABLE", "Google sign-in returned an invalid address.", 502);
       const response = new Response(null, { status: 303, headers: { Location: target.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+      response.headers.append("Set-Cookie", `${cookieName}=${binding}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; Secure; SameSite=Lax`);
       for (const value of result.headers.getSetCookie()) response.headers.append("Set-Cookie", value);
       return response;
     }
+    if (!flow.browserHash || flow.browserHash !== hash(cookie(request))) return page("This browser cannot complete that sign-in. Return to Bookified and start again.", "", 403);
     if (request.method === "GET" && operation === "finish") {
       if (url.searchParams.has("failed")) {
         await flows().updateOne(filter, { $set: { failed: true } });

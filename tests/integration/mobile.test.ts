@@ -90,32 +90,34 @@ describe('native signed sessions and shared backend', () => {
     expect((await account.json()).user.id).toBe(registered.owner);
     expect((await call('account', registered.token)).status).toBe(401);
   });
-  it('binds Google handoff to PKCE, browser consent and a fresh session, then consumes it once', async () => {
+  it('redirects straight to Google without an Origin/form POST and binds the handoff to a fresh browser session', async () => {
     const verifier = randomBytes(32).toString('hex');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const started = await call('auth/google/start', undefined, { challenge });
     expect(started.status).toBe(200);
     const { flowId, browserUrl } = await started.json();
     expect(new URL(browserUrl).origin).toBe(origin);
-    const browser = await mobileGoogleBrowser(new Request(browserUrl));
-    expect(browser.status).toBe(200);
-    expect(browser.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
-    const browserCookie = browser.headers.get('set-cookie')!.split(';')[0];
-    expect(await browser.text()).toContain('Continue with Google');
-    const pending = await call('auth/google/exchange', undefined, { flowId, verifier });
-    expect(await pending.json()).toEqual({ status: 'pending' });
-    expect((await call('auth/google/exchange', undefined, { flowId, verifier: randomBytes(32).toString('hex') })).status).toBe(401);
     const finish = origin + '/api/mobile/oauth?operation=finish&flow=' + flowId;
     expect((await mobileGoogleBrowser(new Request(finish))).status).toBe(403);
     const oldAuth = await state.auth!.handler(new Request(origin + '/api/auth/sign-up/email', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'old', email: 'google-old@fixture.example', password }) }));
     const oldCookie = oldAuth.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const browser = await mobileGoogleBrowser(new Request(browserUrl, { headers: { Cookie: oldCookie } }));
+    expect(browser.status).toBe(303);
+    const google = new URL(browser.headers.get('location')!);
+    expect(google.hostname).toBe('accounts.google.com');
+    expect(google.searchParams.get('redirect_uri')).toBe(origin + '/api/auth/callback/google');
+    expect(google.searchParams.get('prompt')).toBe('select_account');
+    expect(browser.headers.getSetCookie().length).toBeGreaterThan(1);
+    const browserCookie = browser.headers.get('set-cookie')!.split(';')[0];
+    expect(await browser.text()).toBe('');
+    const pending = await call('auth/google/exchange', undefined, { flowId, verifier });
+    expect(await pending.json()).toEqual({ status: 'pending' });
+    expect((await call('auth/google/exchange', undefined, { flowId, verifier: randomBytes(32).toString('hex') })).status).toBe(401);
+    expect((await mobileGoogleBrowser(new Request(finish))).status).toBe(403);
     expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + oldCookie } }))).status).toBe(401);
-    const csrf = await mobileGoogleBrowser(new Request(browserUrl, { method: 'POST', headers: { Cookie: browserCookie } }));
-    expect(csrf.status).toBe(403);
-    const redirect = await mobileGoogleBrowser(new Request(browserUrl, { method: 'POST', headers: { Origin: origin, Cookie: browserCookie + '; ' + oldCookie } }));
-    expect(redirect.status).toBe(303);
-    expect(new URL(redirect.headers.get('location')!).hostname).toBe('accounts.google.com');
-    expect(redirect.headers.getSetCookie().length).toBeGreaterThan(0);
+    expect((await mobileGoogleBrowser(new Request(browserUrl, { headers: { Cookie: browserCookie } }))).status).toBe(409);
+    expect((await mobileGoogleBrowser(new Request(browserUrl))).status).toBe(403);
+    expect((await mobileGoogleBrowser(new Request(browserUrl, { method: 'POST', headers: { Cookie: browserCookie } }))).status).toBe(405);
     expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + oldCookie } }))).status).toBe(401);
     // A fresh real auth session stands in for Google's callback; no provider login is fabricated.
     const fresh = await state.auth!.handler(new Request(origin + '/api/auth/sign-up/email', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Google fixture', email: 'google-fresh@fixture.example', password }) }));
@@ -144,6 +146,26 @@ describe('native signed sessions and shared backend', () => {
     const expired = (await again.json()).flowId;
     await state.db!.collection('mobileOauthFlows').updateOne({ _id: expired }, { $set: { expiresAt: new Date(0) } });
     expect((await call('auth/google/exchange', undefined, { flowId: expired, verifier })).status).toBe(401);
+  });
+  it('starts once with a null mobile-browser Origin and rejects a forged completion', async () => {
+    const verifier = randomBytes(32).toString('hex');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const started = await call('auth/google/start', undefined, { challenge });
+    const { flowId, browserUrl } = await started.json();
+    const results = await Promise.all([
+      mobileGoogleBrowser(new Request(browserUrl, { headers: { Origin: 'null' } })),
+      mobileGoogleBrowser(new Request(browserUrl, { headers: { Origin: 'null' } })),
+    ]);
+    expect(results.filter(result => result.status === 303)).toHaveLength(1);
+    // The loser can read before the claim (409) or after the binding (403).
+    expect([403, 409]).toContain(results.find(result => result.status !== 303)!.status);
+    const redirect = results.find(result => result.status === 303)!;
+    expect(new URL(redirect.headers.get('location')!).hostname).toBe('accounts.google.com');
+    const finish = origin + '/api/mobile/oauth?operation=finish&flow=' + flowId;
+    const rejected = await mobileGoogleBrowser(new Request(finish + '&failed=1', { headers: { Cookie: 'bookified.mobile-google=forged' } }));
+    expect(rejected.status).toBe(403);
+    const pending = await call('auth/google/exchange', undefined, { flowId, verifier });
+    expect(await pending.json()).toEqual({ status: 'pending' });
   });
   it('rejects cookie-only, unsigned and forged bearer sessions; revoked sessions stop working', async () => {
     const user = await register('signed');
