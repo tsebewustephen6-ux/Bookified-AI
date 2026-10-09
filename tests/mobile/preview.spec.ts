@@ -58,6 +58,41 @@ test('sign-in validates fields and preserves useful provider failure feedback', 
   await expect(page.getByRole('alert')).toContainText('Invalid email or password');
   await expect(page.getByPlaceholder('Email address')).toHaveValue(user.email);
 });
+test('phone login preserves credentials through visibility and account-mode changes', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/sign-in');
+  await page.getByPlaceholder('Email address').fill(user.email);
+  await page.getByPlaceholder('Password').fill('fixture-password-2468');
+  await page.getByRole('button', { name: 'Show password', exact: true }).click();
+  await expect(page.getByPlaceholder('Password')).toHaveAttribute('type', 'text');
+  await expect(page.getByPlaceholder('Password')).toHaveValue('fixture-password-2468');
+  await page.getByRole('button', { name: 'New here? Create account', exact: true }).click();
+  await expect(page.getByPlaceholder('Email address')).toHaveValue(user.email);
+  await expect(page.getByPlaceholder('Password')).toHaveAttribute('type', 'password');
+  await page.getByPlaceholder('Your name').fill(user.name);
+  await page.getByRole('button', { name: 'Already have an account? Sign in', exact: true }).click();
+  await expect(page.getByPlaceholder('Your name')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Password')).toHaveValue('fixture-password-2468');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByPlaceholder('Password').press('Enter');
+  await expect(page.getByText('Your library', { exact: true })).toBeVisible();
+});
+test('login and registration remain readable across phone and tablet widths', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/sign-in');
+  for (const width of [320, 375, 768]) {
+    await page.setViewportSize({ width, height: 812 });
+    await expect(page.getByRole('button', { name: 'Continue with Google', exact: true })).toBeVisible();
+    await page.screenshot({ path: `.test-data/mobile-login-${width}.png`, fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: 'New here? Create account', exact: true }).click();
+  await expect(page.getByPlaceholder('Your name')).toBeVisible();
+  await page.screenshot({ path: '.test-data/mobile-register-375.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
 test('Google button opens the first-party browser and accepts a PKCE-bound fixture session', async ({ page }) => {
   await page.addInitScript(() => { window.open = (url) => { document.body.dataset.googleBrowserUrl = String(url); return null; }; });
   await page.goto('/sign-in');
