@@ -62,15 +62,10 @@ async function dispatch(request: Request, segments: string[]): Promise<Response>
       method: "POST", headers, body: JSON.stringify(data),
     }));
     if (!result.ok) return result;
-    const payload: Record<string, unknown> = await result.json();
-    let token = result.headers.get("set-auth-token");
-    if (!token) {
-      const cookies = result.headers.get("set-cookie") || "";
-      const match = cookies.match(/session_token=([^;]+)/);
-      if (match) token = match[1];
-    }
-    if (!token && payload?.token) token = payload.token as string;
-    
+    const payload: unknown = await result.json();
+    const token = result.headers.get("set-auth-token");
+    if (publicAuth && !token)
+      throw new AppError("PROVIDER_UNAVAILABLE", "Sign-in could not create a mobile session. Try again.", 503);
     // Only the authenticated app receives its scoped session token, not server keys.
     return Response.json({ data: payload, ...(token ? { token } : {}) });
   }

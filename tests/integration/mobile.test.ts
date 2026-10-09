@@ -75,6 +75,21 @@ beforeAll(async () => {
 });
 afterAll(async () => { await mongoose.disconnect(); await client?.close(); await mongo?.stop(); });
 describe('native signed sessions and shared backend', () => {
+  it('signs in with a real email/password session and rejects incorrect credentials', async () => {
+    const registered = await register('email-login');
+    await call('auth/sign-out', registered.token, {});
+    const invalid = await call('auth/sign-in/email', undefined, { email: 'email-login@fixture.example', password: 'wrong-password-2468' });
+    expect(invalid.status).toBe(401);
+    const signedIn = await call('auth/sign-in/email', undefined, { email: 'email-login@fixture.example', password });
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.headers.get('set-cookie')).toBeNull();
+    const payload = await signedIn.json();
+    expect(payload.token).toContain('.');
+    const account = await call('account', payload.token);
+    expect(account.status).toBe(200);
+    expect((await account.json()).user.id).toBe(registered.owner);
+    expect((await call('account', registered.token)).status).toBe(401);
+  });
   it('binds Google handoff to PKCE, browser consent and a fresh session, then consumes it once', async () => {
     const verifier = randomBytes(32).toString('hex');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -105,6 +120,7 @@ describe('native signed sessions and shared backend', () => {
     // A fresh real auth session stands in for Google's callback; no provider login is fabricated.
     const fresh = await state.auth!.handler(new Request(origin + '/api/auth/sign-up/email', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Google fixture', email: 'google-fresh@fixture.example', password }) }));
     const freshCookie = fresh.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: freshCookie } }))).status).toBe(403);
     const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + freshCookie } }));
     expect(completed.status).toBe(200);
     expect(await completed.text()).toContain('Google sign-in is complete');

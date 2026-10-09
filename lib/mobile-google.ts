@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth, getAuthDb } from "./better-auth";
 import { baseUrl } from "./env";
 import { AppError, failure } from "./errors";
-import { body, rateLimit } from "./security";
+import { body, rateLimit, sameOrigin } from "./security";
 
 type Flow = { _id: string; challenge: string; expiresAt: Date; browserHash?: string; ott?: string; failed?: boolean; startedAt?: Date; priorSessionId?: string };
 const hash = (value: string) => createHash("sha256").update(value).digest("base64url");
@@ -16,7 +16,7 @@ function cookie(request: Request) {
 const browserUrl = (flow: string, operation = "browser") => new URL(`/api/mobile/oauth?operation=${operation}&flow=${flow}`, baseUrl());
 function page(message: string, form = "", status = 200) {
   return new Response(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bookified Google sign-in</title><body style="background:#FDFBF7;color:#2A2626;font:18px system-ui;padding:32px;max-width:480px;margin:auto"><h1>Bookified</h1><p>${message}</p>${form}</body></html>`, { status, headers: {
-    "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+    "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "same-origin",
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'none'",
     "X-Content-Type-Options": "nosniff",
   } });
@@ -63,25 +63,28 @@ export async function mobileGoogleBrowser(request: Request) {
         const claimed = await flows().updateOne({ ...filter, browserHash: { $exists: false } }, { $set: { browserHash: hash(binding) } });
         if (!claimed.modifiedCount) return page("This sign-in is already open in another browser. Return to Bookified and start again.", "", 409);
       } else if (flow.browserHash !== hash(binding)) return page("Use the browser where this sign-in started.", "", 403);
-      
+      const response = page("Sign in to the same Google account you use on the Bookified website. After signing in, close this browser to return to the app.", `<form method="post" action="${browserUrl(flowId)}"><button style="background:#795744;color:white;border:0;border-radius:24px;padding:16px 24px;font:inherit">Continue with Google</button></form>`);
+      response.headers.append("Set-Cookie", `${cookieName}=${binding}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; Secure; SameSite=Lax`);
+      return response;
+    }
+    if (!flow.browserHash || flow.browserHash !== hash(cookie(request))) return page("This browser cannot complete that sign-in. Return to Bookified and start again.", "", 403);
+    if (request.method === "POST" && operation === "browser") {
+      sameOrigin(request);
       if (flow.startedAt) return page("This Google sign-in has already started. Return to Bookified and start again if needed.", "", 409);
       const previous = await auth.api.getSession({ headers: request.headers });
-      await flows().updateOne(filter, { $set: { startedAt: new Date(), priorSessionId: previous?.session.id || "" } });
-
+      const marked = await flows().updateOne({ ...filter, startedAt: { $exists: false } }, { $set: { startedAt: new Date(), priorSessionId: previous?.session.id || "" } });
+      if (!marked.modifiedCount) return page("This Google sign-in has already started.", "", 409);
       const callback = browserUrl(flowId, "finish");
       const result = await auth.handler(new Request(new URL("/api/auth/sign-in/social", baseUrl()), {
-        method: "POST", headers: { "Content-Type": "application/json", Origin: baseUrl().origin },
+        method: "POST", headers: { "Content-Type": "application/json", Origin: baseUrl().origin, Cookie: request.headers.get("cookie") || "" },
         body: JSON.stringify({ provider: "google", callbackURL: callback.toString(), errorCallbackURL: callback + "&failed=1" }),
       }));
       if (!result.ok) return page("Google sign-in could not start. Return to Bookified and try again.", "", 502);
       const data = await result.json();
       const target = new URL(data.url);
       if (target.protocol !== "https:" || target.hostname !== "accounts.google.com") throw new AppError("PROVIDER_UNAVAILABLE", "Google sign-in returned an invalid address.", 502);
-      
       const response = new Response(null, { status: 303, headers: { Location: target.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
-      response.headers.append("Set-Cookie", `${cookieName}=${binding}; Path=/api/mobile/oauth; Max-Age=600; HttpOnly; Secure; SameSite=Lax`);
       for (const value of result.headers.getSetCookie()) response.headers.append("Set-Cookie", value);
-      
       return response;
     }
     if (request.method === "GET" && operation === "finish") {

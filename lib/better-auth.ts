@@ -38,7 +38,7 @@ export const auth = betterAuth({
   baseURL:
     process.env.BETTER_AUTH_URL ||
     process.env.APP_BASE_URL ||
-    (process.env.VERCEL_URL ? "https://bookified-beige-six.vercel.app" : "http://localhost:3000"),
+    (process.env.NODE_ENV === "production" ? undefined : "http://localhost:3000"),
   rateLimit: { enabled: true, storage: "database" },
   emailAndPassword: {
     enabled: true,
@@ -59,5 +59,6 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: ["bookified://", "http://10.70.22.83:3000", "exp://10.70.22.83:8081", "exp://10.70.22.83:8081/--/", "http://10.70.22.83:8081"],
+  // Native clients use the mobile bearer adapter, so no device/IP redirects are trusted.
+  trustedOrigins: [],
 });

@@ -4,16 +4,17 @@ import { baseUrl } from "./env";
 import { connect } from "../database/connection";
 import { Rate } from "../database/models";
 export function sameOrigin(request: Request) {
-  let origin = request.headers.get("origin");
-  if (origin === "null") origin = null;
+  const origin = request.headers.get("origin");
   const referer = request.headers.get("referer");
   const base = baseUrl().origin;
   
-  if (origin) {
-    if (origin !== base) throw new AppError("UNAUTHORIZED", "Please submit this request from Bookified.", 403);
-  } else if (referer) {
-    if (!referer.startsWith(base)) throw new AppError("UNAUTHORIZED", "Please submit this request from Bookified.", 403);
+  if (origin === base) return;
+  // Some mobile browsers send a null Origin. Require an exact first-party
+  // Referer in that case; a missing header or a prefix lookalike is not proof.
+  if ((!origin || origin === "null") && referer) {
+    try { if (new URL(referer).origin === base) return; } catch { /* reject invalid URLs */ }
   }
+  throw new AppError("UNAUTHORIZED", "Please submit this request from Bookified.", 403);
 }
 export function secretEqual(a: string, b: string) {
   const x = Buffer.from(a);
