@@ -62,7 +62,7 @@ async function dispatch(request: Request, segments: string[]): Promise<Response>
       method: "POST", headers, body: JSON.stringify(data),
     }));
     if (!result.ok) return result;
-    const payload: any = await result.json();
+    const payload: Record<string, unknown> = await result.json();
     let token = result.headers.get("set-auth-token");
     if (!token) {
       const cookies = result.headers.get("set-cookie") || "";

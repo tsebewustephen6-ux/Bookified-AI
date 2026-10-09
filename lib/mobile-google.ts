@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth, getAuthDb } from "./better-auth";
 import { baseUrl } from "./env";
 import { AppError, failure } from "./errors";
-import { body, rateLimit, sameOrigin } from "./security";
+import { body, rateLimit } from "./security";
 
 type Flow = { _id: string; challenge: string; expiresAt: Date; browserHash?: string; ott?: string; failed?: boolean; startedAt?: Date; priorSessionId?: string };
 const hash = (value: string) => createHash("sha256").update(value).digest("base64url");
