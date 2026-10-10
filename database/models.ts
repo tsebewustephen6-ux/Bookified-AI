@@ -88,11 +88,17 @@ const sessionSchema = new Schema(
     counted: { type: Boolean, default: false },
     capabilityHash: String,
     expiresAt: Date,
+    resumeFrom: { type: Schema.Types.ObjectId },
+    transcript: { type: [new Schema({ role: { type: String, enum: ['user', 'assistant'], required: true }, text: { type: String, required: true } }, { _id: false })], default: [] },
+    transcriptRevision: { type: Number, default: 0 },
+    transcriptComplete: { type: Boolean, default: false },
+    lastRetrievalQuery: String,
     references: [{ segmentId: String, pageStart: Number, pageEnd: Number }],
   },
   options,
 );
 sessionSchema.index({ ownerId: 1, usagePeriodStart: 1 });
+sessionSchema.index({ ownerId: 1, bookId: 1, _id: -1 });
 sessionSchema.index({ ownerId: 1, idempotencyKey: 1 }, { unique: true });
 sessionSchema.index(
   { providerCallId: 1 },

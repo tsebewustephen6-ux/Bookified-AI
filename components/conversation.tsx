@@ -1,22 +1,54 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Headphones } from "lucide-react";
 import { useVoice } from "@/hooks/use-voice";
+import { useConversationHistory } from '@/hooks/use-conversation-history';
+import type { SavedTurn } from '@/lib/conversation-history';
 function time(seconds: number) {
   return `${Math.floor(seconds / 60)
     .toString()
     .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 }
-export function Conversation({
+export function Conversation(props: { bookId: string; limit: number; voiceName: string }) {
+  const saved = useConversationHistory(props.bookId);
+  const refresh = saved.refresh;
+  const [active, setActive] = useState(false); const wasActive = useRef(false);
+  useEffect(() => { if (wasActive.current && !active) void refresh(); wasActive.current = active; }, [active, refresh]);
+  return <div>
+    <section className="voice-console" style={{ marginBottom: 20 }}>
+      <h2>Your conversations</h2>
+      <p>{saved.selected ? 'Continuing a saved conversation' : 'Starting from the beginning'}. Each new call has its own plan time limit.</p>
+      <button type="button" className="btn btn-secondary" disabled={active || saved.loading} onClick={saved.fresh}>Start from beginning</button>{' '}
+      <button type="button" className="btn btn-secondary" disabled={active || saved.loading} onClick={() => void saved.refresh()}>Refresh saved conversations</button>
+      {saved.loading ? <p role="status">Loading conversations…</p> : null}
+      {saved.error ? <p role="alert" className="error-message">{saved.error}</p> : null}
+    </section>
+    <LiveConversation key={`${props.bookId}:${saved.revision}`} {...props} selectionPending={saved.loading} resumeFrom={saved.selected?.id} savedMessages={saved.selected?.messages} onActiveChange={setActive} />
+    <section className="voice-console" style={{ marginTop: 20 }}><h2>Saved sessions</h2>
+      {!saved.loading && !saved.error && !saved.history.items.length ? <p>No saved conversations yet.</p> : null}
+      {saved.history.items.map(item => <article key={item.id} style={{ marginTop: 16 }}>
+        <p>{new Date(item.date).toLocaleString()} · {Math.ceil(item.durationSeconds / 60)} min · {item.status}</p>
+        <p>{item.preview || 'No saved text is available for this session.'}</p>
+        <button type="button" className="btn btn-secondary" disabled={active || saved.loading || !item.hasTranscript || ['active', 'reserved'].includes(item.status)} onClick={() => void saved.select(item.id)}>View and continue conversation</button>
+      </article>)}
+      {saved.history.nextCursor ? <button type="button" className="btn btn-secondary" disabled={active || saved.loading} onClick={() => void saved.refresh(saved.history.nextCursor!)}>Older conversations</button> : null}
+    </section>
+  </div>;
+}
+function LiveConversation({
   bookId,
   limit,
   voiceName,
+  resumeFrom, savedMessages, onActiveChange, selectionPending,
 }: {
   bookId: string;
   limit: number;
   voiceName: string;
+  resumeFrom?: string; savedMessages?: SavedTurn[]; onActiveChange: (active: boolean) => void;
+  selectionPending: boolean;
 }) {
-  const call = useVoice(bookId, limit);
+  const call = useVoice(bookId, limit, undefined, { resumeFrom, messages: savedMessages });
+  useEffect(() => { onActiveChange(call.active); }, [call.active, onActiveChange]);
   const scroll = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   useEffect(() => {
@@ -40,7 +72,7 @@ export function Conversation({
           className="mic-button"
           type="button"
           onClick={() => void (call.active ? call.stop() : call.start())}
-          disabled={call.state === "stopping"}
+          disabled={call.state === "stopping" || (!call.active && selectionPending)}
           aria-label={
             call.active ? "Stop conversation" : "Start microphone conversation"
           }
@@ -63,8 +95,7 @@ export function Conversation({
           </p>
         ) : null}
         <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 15 }}>
-          Use your microphone to ask about this book. Transcripts stay in this
-          browser session.
+          Text conversations are saved privately for this book. Audio is not recorded.
         </p>
       </section>
       <div

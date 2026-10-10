@@ -14,7 +14,7 @@ import { GET as processing } from "../app/api/books/[id]/processing/route";
 import { GET as cover } from "../app/api/books/[id]/cover/route";
 import { POST as confirm } from "../app/api/books/[id]/confirm/route";
 import { POST as retry } from "../app/api/books/[id]/retry/route";
-import { POST as start } from "../app/api/books/[id]/sessions/route";
+import { POST as start, GET as history } from "../app/api/books/[id]/sessions/route";
 import { GET as sessionStatus, POST as stop } from "../app/api/sessions/[id]/route";
 
 export function mobileOriginAllowed(origin: string | null) {
@@ -98,6 +98,7 @@ async function dispatch(request: Request, segments: string[]): Promise<Response>
     if (request.method === "POST" && segments[2] === "confirm") return confirm(forwarded, context);
     if (request.method === "POST" && segments[2] === "retry") return retry(forwarded, context);
     if (request.method === "POST" && segments[2] === "sessions") return start(forwarded, context);
+    if (request.method === "GET" && segments[2] === "sessions") return history(forwarded, context);
   }
   if (segments[0] === "sessions" && /^[a-f0-9]{24}$/i.test(segments[1] || "") && segments.length === 2) {
     if (request.method === "GET") return sessionStatus(forwarded, context);

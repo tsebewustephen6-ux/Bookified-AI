@@ -60,6 +60,18 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+it('resumes the selected saved session and keeps its visible transcript when starting', async () => {
+  const { result } = renderHook(() => useVoice('book-fixture', 300, undefined, { resumeFrom: 'saved-session', messages: [{ role: 'user', text: 'Explain the second step' }] }));
+  expect(result.current.messages[0].text).toBe('Explain the second step');
+  await act(async () => result.current.start());
+  const admission = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/sessions'));
+  expect(JSON.parse(String(admission?.[1]?.body)).resumeFrom).toBe('saved-session');
+  expect(result.current.messages[0].text).toBe('Explain the second step');
+  await act(async () => result.current.stop());
+  await act(async () => result.current.start());
+  const admissions = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/sessions'));
+  expect(JSON.parse(String(admissions.at(-1)?.[1]?.body)).resumeFrom).toBe('session-fixture');
+});
 it("Strict Mode creates no call until requested and unmount removes listeners and stops once", async () => {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <StrictMode>{children}</StrictMode>

@@ -4,6 +4,7 @@ import type Vapi from "@vapi-ai/web";
 import { z } from "zod";
 import { api, ApiError } from "../lib/client-api";
 import { appendTranscript, type TranscriptMessage } from "../lib/transcripts";
+import type { SavedTurn } from '../lib/conversation-history';
 export type VoiceState =
   | "idle"
   | "connecting"
@@ -31,10 +32,10 @@ const statusSchema = z.object({
     }),
   ),
 });
-export function useVoice(bookId: string, limit: number, request: typeof api = api) {
+export function useVoice(bookId: string, limit: number, request: typeof api = api, history?: { resumeFrom?: string; messages?: SavedTurn[] }) {
   const [state, setState] = useState<VoiceState>("idle");
   const [error, setError] = useState("");
-  const [messages, setMessages] = useState<TranscriptMessage[]>([]);
+  const [messages, setMessages] = useState<TranscriptMessage[]>(() => (history?.messages || []).map((message, index) => ({ ...message, id: 'saved-' + index, final: true })));
   const [elapsed, setElapsed] = useState(0);
   const [maxDuration, setMaxDuration] = useState(limit);
   const [references, setReferences] = useState<
@@ -50,6 +51,9 @@ export function useVoice(bookId: string, limit: number, request: typeof api = ap
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const started = useRef(0);
   const admissionKey = useRef<string | null>(null);
+  const completedSession = useRef<string | null>(null);
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
   function clearTimers() {
     if (timer.current) clearInterval(timer.current);
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -69,6 +73,7 @@ export function useVoice(bookId: string, limit: number, request: typeof api = ap
     sdk?.removeAllListeners();
     if (sdk) await Promise.resolve(sdk.stop()).catch(() => {});
     if (sessionId.current) {
+      if (started.current > 0) completedSession.current = sessionId.current;
       admissionKey.current = null;
       try {
         await request(
@@ -111,7 +116,8 @@ export function useVoice(bookId: string, limit: number, request: typeof api = ap
     const attempt = ++generation.current;
     setError("");
     setState("connecting");
-    setMessages([]);
+    setMessages(completedSession.current ? messagesRef.current.filter(message => message.final) : (history?.messages || []).map((message, index) => ({ ...message, id: 'saved-' + index, final: true })));
+    started.current = 0;
     setReferences([]);
     setElapsed(0);
     try {
@@ -131,6 +137,7 @@ export function useVoice(bookId: string, limit: number, request: typeof api = ap
           method: "POST",
           body: JSON.stringify({
             idempotencyKey: (admissionKey.current ||= crypto.randomUUID()),
+            ...((completedSession.current || history?.resumeFrom) ? { resumeFrom: completedSession.current || history?.resumeFrom } : {}),
           }),
         },
       );

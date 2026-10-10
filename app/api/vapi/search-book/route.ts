@@ -65,6 +65,7 @@ export async function POST(request: Request) {
         const params = z
           .object({
             query: z.string().trim().min(1).max(500),
+            queries: z.array(z.string().trim().min(1).max(500)).max(3).optional(),
             bookId: z.string().optional(),
           })
           .strict()
@@ -78,15 +79,21 @@ export async function POST(request: Request) {
           (params.bookId && params.bookId !== record.bookId.toString())
         )
           throw new AppError("UNAUTHORIZED", "Tool binding mismatch.", 403);
-        const result = await retrieve(
-          record.ownerId,
-          record.bookId.toString(),
-          params.query,
-        );
+        const recentUser = [...(record.transcript || [])].reverse().find(turn => turn.role === 'user')?.text || '';
+        const context = record.lastRetrievalQuery || recentUser;
+        const query = /\b(those|these|them|that|it|second|third|next)\b/i.test(params.query) && context ? `${params.query} ${context}`.slice(0, 500) : params.query;
+        const searches = await Promise.all([...new Set([query, ...(params.queries || [])])].map(input => retrieve(record.ownerId, record.bookId.toString(), input)));
+        let budget = 24000;
+        // Interleave ranked results so an overview cannot consume the budget
+        // before more specific alternative searches contribute evidence.
+        const candidates = Array.from({ length: Math.max(...searches.map(result => result.passages.length), 0) }, (_, index) => searches.flatMap(result => result.passages[index] ? [result.passages[index]] : [])).flat();
+        const passages = [...new Map(candidates.map(p => [p.segmentId, p])).values()].flatMap(p => { const content = p.content.slice(0, Math.min(3000, budget)); budget -= content.length; return content ? [{ ...p, content }] : []; });
+        const result = { evidence: passages.length > 0, passages, searchedQueries: [query, ...(params.queries || [])] };
         await VoiceSession.updateOne(
           { _id: record._id },
           {
             $set: {
+              lastRetrievalQuery: query,
               references: result.passages.map(
                 ({ segmentId, pageStart, pageEnd }) => ({
                   segmentId,

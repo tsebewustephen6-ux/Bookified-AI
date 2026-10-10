@@ -4,11 +4,13 @@ import { Account, Usage, VoiceSession } from "../database/models";
 import { ownedBook } from "./books";
 import { AppError } from "./errors";
 import { plans, utcPeriod, type Plan } from "./plans";
+import { idSchema } from './validation';
 export async function reserveSession(
   ownerId: string,
   bookId: string,
   plan: Plan,
   idempotencyKey: string,
+  resumeFrom?: string,
 ) {
   const book = await ownedBook(ownerId, bookId);
   if (book.status !== "ready")
@@ -17,6 +19,10 @@ export async function reserveSession(
       "Wait for this book to finish processing.",
       409,
     );
+  if (resumeFrom) {
+    if (!idSchema.safeParse(resumeFrom).success || !await VoiceSession.exists({ _id: resumeFrom, ownerId, bookId: book._id, status: { $in: ['ended', 'failed', 'expired'] }, 'transcript.0': { $exists: true } }))
+      throw new AppError('NOT_FOUND', 'Saved conversation is unavailable for this book.', 404);
+  }
   const period = utcPeriod();
   await Account.updateOne(
     { ownerId },
@@ -34,7 +40,7 @@ export async function reserveSession(
       idempotencyKey,
     }).session(session);
     if (prior) {
-      if (prior.bookId.toString() !== bookId)
+      if (prior.bookId.toString() !== bookId || (prior.resumeFrom?.toString() || undefined) !== resumeFrom)
         throw new AppError(
           "CONFLICT",
           "Submission key already belongs to another book.",
@@ -84,6 +90,7 @@ export async function reserveSession(
           usagePeriodStart: period.start,
           usagePeriodEnd: period.end,
           idempotencyKey,
+          ...(resumeFrom ? { resumeFrom } : {}),
           expiresAt: new Date(Date.now() + (plans[plan].duration + 180) * 1000),
         },
       ],

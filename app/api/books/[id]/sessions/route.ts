@@ -5,6 +5,8 @@ import { reserveSession } from "@/lib/sessions";
 import { createCall, validateVapiConfiguration } from "@/lib/vapi";
 import { sameOrigin, body, rateLimit } from "@/lib/security";
 import { failure, AppError } from "@/lib/errors";
+import { VoiceSession } from '@/database/models';
+import { idSchema } from '@/lib/validation';
 export const runtime = "nodejs";
 export async function POST(
   request: Request,
@@ -18,7 +20,7 @@ export async function POST(
     const book = await ownedBook(owner, id);
     validateVapiConfiguration(book.personaId);
     const input = z
-      .object({ idempotencyKey: z.string().uuid() })
+      .object({ idempotencyKey: z.string().uuid(), resumeFrom: idSchema.optional() })
       .strict()
       .safeParse(await body(request));
     if (!input.success)
@@ -28,6 +30,7 @@ export async function POST(
       id,
       await entitlement(owner),
       input.data.idempotencyKey,
+      input.data.resumeFrom,
     );
     return Response.json(await createCall(record._id.toString()), {
       headers: { "Cache-Control": "no-store" },
@@ -35,4 +38,21 @@ export async function POST(
   } catch (error) {
     return failure(error);
   }
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ownerId = await identity(); const book = await ownedBook(ownerId, (await context.params).id);
+    await rateLimit(ownerId, 'conversation-history', 60);
+    const url = new URL(request.url); const selected = url.searchParams.get('session'); const cursor = url.searchParams.get('cursor');
+    if ((selected && !idSchema.safeParse(selected).success) || (cursor && !idSchema.safeParse(cursor).success)) throw new AppError('VALIDATION', 'Invalid history selection.');
+    const scope = { ownerId, bookId: book._id };
+    if (selected) {
+      const record = await VoiceSession.findOne({ ...scope, _id: selected }).select('transcript resumeFrom').lean();
+      if (!record) throw new AppError('NOT_FOUND', 'Conversation not found.', 404);
+      return Response.json({ id: selected, messages: record.transcript || [], resumeFrom: record.resumeFrom?.toString() || null }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    const records = await VoiceSession.find({ ...scope, ...(cursor ? { _id: { $lt: cursor } } : {}) }).select('reservedAt status durationSeconds transcript').slice('transcript', -1).sort({ _id: -1 }).limit(21).lean();
+    return Response.json({ items: records.slice(0, 20).map(record => ({ id: record._id.toString(), date: record.reservedAt.toISOString(), status: record.status, durationSeconds: record.durationSeconds, preview: record.transcript?.[0]?.text.slice(0, 140) || '', hasTranscript: !!record.transcript?.length })), nextCursor: records.length > 20 ? records[19]._id.toString() : null }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) { return failure(error); }
 }

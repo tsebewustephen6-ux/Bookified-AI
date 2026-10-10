@@ -30,6 +30,7 @@ test.beforeEach(async ({ page }) => {
       else if (path === '/books') { const query = (url.searchParams.get('q') || '').toLowerCase(); const books = [book, secondBook].filter(item => !query || (item.title + ' ' + item.author).toLowerCase().includes(query)); result = { books, total: books.length }; }
       else if (path === '/books/' + book.id + '/cover') { await route.fulfill({ headers, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="150"><rect width="100" height="150" fill="#795744"/></svg>' }); return; }
       else if (path === '/books/' + book.id) result = { book, progress: null };
+      else if (path === '/books/' + book.id + '/sessions' && request.method() === 'GET') result = url.searchParams.has('session') ? { id: 'cccccccccccccccccccccccc', resumeFrom: null, messages: [{ role: 'user', text: 'Teach me the Beryl sequence' }, { role: 'assistant', text: 'The second step checks understanding.' }] } : { items: [{ id: 'cccccccccccccccccccccccc', date: '2026-10-10T12:00:00Z', status: 'ended', durationSeconds: 300, preview: 'The second step checks understanding.', hasTranscript: true }], nextCursor: null };
       else if (path === '/auth/sign-out') result = { data: { success: true } };
       else { await route.fulfill({ status: 404, headers, json: { error: { message: 'Fixture operation unavailable.' } } }); return; }
     }
@@ -107,6 +108,7 @@ test('Google waiting state shows only disabled loading without cancel or browser
   await page.route('**/api/mobile/auth/google/exchange', async route => {
     const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
     if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return; }
+    if (route.request().method() === 'GET') { await route.fallback(); return; }
     await route.fulfill({ headers, json: { status: 'pending' } });
   });
   await page.goto('/sign-in');
@@ -118,6 +120,17 @@ test('Google waiting state shows only disabled loading without cancel or browser
   await expect(page.getByRole('button', { name: 'Cancel Google sign-in' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Please wait…' })).toBeDisabled();
   await page.screenshot({ path: '.test-data/mobile-google-loading.png' });
+});
+
+test('saved per-book conversation loads its transcript and can be reset without starting a call', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await signIn(page); await page.getByRole('button', { name: 'Open ' + book.title }).click();
+  await page.getByRole('button', { name: 'View and continue conversation' }).click();
+  await expect(page.getByText('Teach me the Beryl sequence', { exact: true })).toBeVisible();
+  await expect(page.getByText('Continuing a saved conversation', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Start from beginning' }).click();
+  await expect(page.getByText('Teach me the Beryl sequence', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start microphone conversation' })).toBeEnabled();
 });
 test('native screens consume the shared API shape, search books and sign out', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
@@ -148,6 +161,7 @@ test('phone book controls stay visible and a rejected admission is recoverable w
   });
   let admissions = 0;
   await page.route('**/api/mobile/books/' + book.id + '/sessions', async route => {
+    if (route.request().method() === 'GET') { await route.fallback(); return; }
     const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' };
     if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return; }
     admissions++;

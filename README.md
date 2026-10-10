@@ -2,6 +2,8 @@
 
 Upload a PDF, choose an account-verified voice, and talk to its contents.
 
+New conversations save private text history per book; audio recording remains disabled. View and continue a saved session, or start from the beginning without deleting earlier chats. Continuing creates a new quota-enforced timed call. Older conversations made before history was enabled cannot be recovered. Retrieval expands relevant passages with neighbouring context and supports focused alternative searches; illustrative teaching examples are distinguished from book evidence.
+
 Read [PROJECT.md](PROJECT.md) for the build contract, reconciled implementation ledger, setup and remaining acceptance gates. The current working tree uses Better Auth with MongoDB. Hubtel MoMo/card checkout is implemented but disabled pending merchant onboarding, prices and approved status-API egress; see [payment setup](docs/hubtel-payments.md). Voice configuration requires live provider verification.
 
 Use Node 24. Run npm ci, configure ignored .env.local from .env.example, then npm run config:check and npm run db:indexes. Start npm run dev and npm run worker separately.

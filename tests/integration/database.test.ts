@@ -39,7 +39,7 @@ import {
   GET as sessionStatus,
   POST as sessionStop,
 } from "../../app/api/sessions/[id]/route";
-import { POST as admissionRoute } from "../../app/api/books/[id]/sessions/route";
+import { POST as admissionRoute, GET as historyRoute } from "../../app/api/books/[id]/sessions/route";
 import { POST as bookAdmissionRoute } from "../../app/api/books/route";
 import { POST as toolRoute } from "../../app/api/vapi/search-book/route";
 import { POST as eventsRoute } from "../../app/api/vapi/events/route";
@@ -161,6 +161,55 @@ async function ready(owner: string) {
   return book;
 }
 describe("real MongoDB transactions and scoped text index", () => {
+  it('retrieves a complete sequence across neighbouring chunks without foreign/version leakage', async () => {
+    const book = await ready('deep-retrieval');
+    await Segment.insertMany([
+      { ownerId: 'deep-retrieval', bookId: book._id, processingVersion: 1, segmentIndex: 1, pageStart: 3, pageEnd: 3, content: 'The Beryl persuasion sequence begins with three steps. Step one establishes relevance.', wordCount: 14 },
+      { ownerId: 'deep-retrieval', bookId: book._id, processingVersion: 1, segmentIndex: 2, pageStart: 4, pageEnd: 4, content: 'Step two checks understanding. Step three asks for a concrete next action. The code is BERYL-2468.', wordCount: 19 },
+    ]);
+    const result = await retrieve('deep-retrieval', book._id.toString(), 'Please explain the Beryl persuasion sequence');
+    expect(result.passages.some(p => p.content.includes('Step three'))).toBe(true);
+    expect(result.passages.some(p => p.pageStart === 4)).toBe(true);
+  });
+  it('saves verified provider conversation updates, ignores replay regression, and scopes history/continuation to the book owner', async () => {
+    configureVapi();
+    const book = await ready('history-reader');
+    const session = await reserveSession('history-reader', book._id.toString(), 'standard', crypto.randomUUID());
+    const capability = 'isolated-history-capability';
+    const { createHash } = await import('node:crypto');
+    session.providerCallId = 'c824888f-1fda-4608-8661-68d9a515c123';
+    session.capabilityHash = createHash('sha256').update(capability).digest('hex'); await session.save();
+    const payload = { message: { type: 'conversation-update', call: { id: session.providerCallId }, timestamp: 200, messagesOpenAIFormatted: [{ role: 'system', content: 'Never store this' }, { role: 'user', content: 'Explain Beryl steps' }, { role: 'assistant', content: 'Step two checks understanding.' }] } };
+    expect((await eventsRoute(providerRequest('/api/vapi/events', payload, capability))).status).toBe(200);
+    expect((await eventsRoute(providerRequest('/api/vapi/events', { message: { ...payload.message, timestamp: 100, messagesOpenAIFormatted: [{ role: 'user', content: 'older' }] } }, capability))).status).toBe(200);
+    const saved = await VoiceSession.findById(session._id); expect(saved?.transcript).toHaveLength(2); expect(saved?.transcript[1].text).toContain('Step two');
+    expect((await eventsRoute(providerRequest('/api/vapi/events', payload, 'foreign-capability'))).status).toBe(403);
+    browser.owner = 'history-reader';
+    const context = { params: Promise.resolve({ id: book._id.toString() }) };
+    const listing = await historyRoute(new Request('https://bookified.example/api/books/' + book._id + '/sessions'), context);
+    expect((await listing.json()).items[0].hasTranscript).toBe(true);
+    const selected = await historyRoute(new Request('https://bookified.example/api/books/' + book._id + '/sessions?session=' + session._id), context);
+    expect((await selected.json()).messages).toHaveLength(2);
+    await accountSession(session._id.toString(), new Date(), new Date());
+    const resumed = await reserveSession('history-reader', book._id.toString(), 'standard', crypto.randomUUID(), session._id.toString());
+    expect(resumed.resumeFrom?.toString()).toBe(session._id.toString());
+    let resumedPayload: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/assistant/')) return Response.json({ id: process.env.VAPI_ASSISTANT_ID, orgId: 'c4613cc0-3c78-4f55-b9d9-b75a09fd97f1' });
+      resumedPayload = JSON.parse(String(init?.body));
+      return Response.json({ id: '9478ebf9-3b93-471c-a3a4-3297af592d17', status: 'queued', webCallUrl: 'https://voice.example/join' });
+    }));
+    await createCall(resumed._id.toString());
+    expect(resumedPayload).toMatchObject({ assistantOverrides: {
+      maxDurationSeconds: 900, firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+      model: { messages: expect.arrayContaining([{ role: 'user', content: 'Explain Beryl steps' }, { role: 'assistant', content: 'Step two checks understanding.' }]) },
+      serverMessages: expect.arrayContaining(['conversation-update']), artifactPlan: { recordingEnabled: false },
+    } });
+    const other = await ready('history-other');
+    await expect(reserveSession('history-other', other._id.toString(), 'standard', crypto.randomUUID(), session._id.toString())).rejects.toThrow('unavailable');
+    browser.owner = 'history-other';
+    expect((await historyRoute(new Request('https://bookified.example/api/books/' + book._id + '/sessions'), context)).status).toBe(404);
+  });
   it("rejects an unconfigured persona before taking a slot", async () => {
     await expect(
       admitBook("unconfigured", "free", {
