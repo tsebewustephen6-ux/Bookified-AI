@@ -6,7 +6,7 @@ export default defineConfig({
     { find: /^react$/, replacement: mobilePackage('react') },
     { find: /^react\/jsx-runtime$/, replacement: mobilePackage('react/jsx-runtime.js') },
     { find: /^react-dom\/client$/, replacement: mobilePackage('react-dom/client.js') },
-    ...['react-native', 'expo-secure-store', 'expo-crypto', 'expo-web-browser'].map(name => ({ find: name, replacement: mobilePackage(name) })),
+    ...['react-native', 'expo-secure-store', 'expo-crypto', 'expo-web-browser', 'expo-linking'].map(name => ({ find: name, replacement: mobilePackage(name) })),
   ] },
   test: { include: ['mobile/tests/**/*.test.tsx'], environment: 'jsdom', fileParallelism: false },
 });

@@ -93,7 +93,8 @@ describe('native signed sessions and shared backend', () => {
   it('redirects straight to Google without an Origin/form POST and binds the handoff to a fresh browser session', async () => {
     const verifier = randomBytes(32).toString('hex');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    const started = await call('auth/google/start', undefined, { challenge });
+    const returnUrl = 'exps://owned-preview.exp.direct/--/sign-in';
+    const started = await call('auth/google/start', undefined, { challenge, returnUrl });
     expect(started.status).toBe(200);
     const { flowId, browserUrl } = await started.json();
     expect(new URL(browserUrl).origin).toBe(origin);
@@ -125,7 +126,11 @@ describe('native signed sessions and shared backend', () => {
     expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: freshCookie } }))).status).toBe(403);
     const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + freshCookie } }));
     expect(completed.status).toBe(200);
-    expect(await completed.text()).toContain('Google sign-in is complete');
+    const completedHtml = await completed.text();
+    expect(completedHtml).toContain('Authenticated. You can return to the app.');
+    expect(completedHtml).toContain(`<a href="${returnUrl}">Return to app</a>`);
+    expect(completedHtml).toContain(`content="0;url=${returnUrl}"`);
+    expect(completedHtml).not.toMatch(/Close this browser|X or Back|session_token/);
     const exchanged = await call('auth/google/exchange', undefined, { flowId, verifier });
     expect(exchanged.status).toBe(200);
     expect(exchanged.headers.get('set-cookie')).toBeNull();
@@ -134,6 +139,14 @@ describe('native signed sessions and shared backend', () => {
     expect(result.token).toContain('.');
     expect((await call('account', result.token)).status).toBe(200);
     expect((await call('auth/google/exchange', undefined, { flowId, verifier })).status).toBe(401);
+  });
+  it('rejects arbitrary or credential-bearing return redirects before creating a Google flow', async () => {
+    const challenge = createHash('sha256').update(randomBytes(32)).digest('base64url');
+    for (const returnUrl of ['https://evil.example', 'javascript:alert(1)', 'exps://evil.example/--/sign-in', 'exps://owned.exp.direct/--/sign-in?token=secret', 'exps://owned.exp.direct/--/sign-in#secret', 'exps://user@owned.exp.direct/--/sign-in', 'bookifiedmobile://other', 'exps://owned.exp.direct/--/sign-in%22']) {
+      expect((await call('auth/google/start', undefined, { challenge, returnUrl })).status).toBe(400);
+    }
+    expect(await state.db!.collection('mobileOauthFlows').countDocuments({ challenge })).toBe(0);
+    expect((await call('auth/google/start', undefined, { challenge, returnUrl: 'bookifiedmobile://sign-in' })).status).toBe(200);
   });
   it('expires and rejects cancelled Google handoffs without consuming another flow', async () => {
     const verifier = randomBytes(32).toString('hex');

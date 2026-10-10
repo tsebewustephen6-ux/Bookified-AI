@@ -113,7 +113,7 @@ test('Google waiting state can be cancelled without signing in', async ({ page }
   await expect(page.getByRole('button', { name: 'Continue with Google', exact: true })).toBeVisible();
   await page.screenshot({ path: '.test-data/mobile-google-sign-in.png' });
   await page.getByRole('button', { name: 'Continue with Google', exact: true }).click();
-  await expect(page.getByText('Finish signing in in the browser, then close it to return here.')).toBeVisible();
+  await expect(page.getByText('Finish signing in in the browser, then close it to return here.')).toHaveCount(0);
   await page.getByRole('button', { name: 'Cancel Google sign-in' }).click();
   await expect(page.getByRole('alert')).toContainText('Google sign-in was cancelled');
   await expect(page.getByRole('button', { name: 'Continue with Google', exact: true })).toBeEnabled();

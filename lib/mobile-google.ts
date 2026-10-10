@@ -5,7 +5,7 @@ import { baseUrl } from "./env";
 import { AppError, failure } from "./errors";
 import { body, rateLimit } from "./security";
 
-type Flow = { _id: string; challenge: string; expiresAt: Date; browserHash?: string; ott?: string; failed?: boolean; startedAt?: Date; priorSessionId?: string };
+type Flow = { _id: string; challenge: string; expiresAt: Date; returnUrl?: string; browserHash?: string; ott?: string; failed?: boolean; startedAt?: Date; priorSessionId?: string };
 const hash = (value: string) => createHash("sha256").update(value).digest("base64url");
 const flows = () => getAuthDb().collection<Flow>("mobileOauthFlows");
 const idSchema = z.string().uuid();
@@ -14,22 +14,31 @@ function cookie(request: Request) {
   return (request.headers.get("cookie") || "").split(";").map(value => value.trim()).find(value => value.startsWith(cookieName + "="))?.slice(cookieName.length + 1) || "";
 }
 const browserUrl = (flow: string, operation = "browser") => new URL(`/api/mobile/oauth?operation=${operation}&flow=${flow}`, baseUrl());
-function page(message: string, form = "", status = 200) {
-  return new Response(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bookified Google sign-in</title><body style="background:#FDFBF7;color:#2A2626;font:18px system-ui;padding:32px;max-width:480px;margin:auto"><h1>Bookified</h1><p>${message}</p>${form}</body></html>`, { status, headers: {
+function page(message: string, form = "", status = 200, head = "") {
+  return new Response(`<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bookified Google sign-in</title>${head}</head><body style="background:#FDFBF7;color:#2A2626;font:18px system-ui;padding:32px;max-width:480px;margin:auto"><h1>Bookified</h1><p>${message}</p>${form}</body></html>`, { status, headers: {
     "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "same-origin",
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'none'",
     "X-Content-Type-Options": "nosniff",
   } });
 }
+// Only an app route, never an arbitrary web redirect. No credentials are placed in this URL.
+export const mobileReturnUrl = z.string().max(512).url().refine(value => {
+  const url = new URL(value);
+  if (url.username || url.password || url.search || url.hash || value !== url.toString()) return false;
+  if (url.protocol === 'bookifiedmobile:') return url.hostname === 'sign-in' && !url.pathname && !url.port;
+  return ['exp:', 'exps:'].includes(url.protocol) && /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.exp\.direct$/.test(url.hostname) && !url.port && url.pathname === '/--/sign-in';
+}, 'Invalid app return address.');
 export async function mobileGoogle(request: Request, operation: "start" | "exchange") {
   if (operation === "start") {
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) throw new AppError("PROVIDER_UNAVAILABLE", "Google sign-in is not configured.", 503);
-    const { challenge } = z.object({ challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).parse(await body(request, 1024));
+    const input = z.object({ challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), returnUrl: mobileReturnUrl.optional() }).safeParse(await body(request, 1024));
+    if (!input.success) throw new AppError('VALIDATION', 'Invalid Google sign-in request.');
+    const { challenge, returnUrl } = input.data;
     const caller = hash((request.headers.get("x-forwarded-for") || "native").split(",")[0]);
     await rateLimit(caller, "mobile-google-start", 10);
     await flows().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
     const id = randomUUID();
-    await flows().insertOne({ _id: id, challenge, expiresAt: new Date(Date.now() + 600000) });
+    await flows().insertOne({ _id: id, challenge, ...(returnUrl ? { returnUrl } : {}), expiresAt: new Date(Date.now() + 600000) });
     return Response.json({ flowId: id, browserUrl: browserUrl(id).toString() });
   }
   const { flowId, verifier } = z.object({ flowId: idSchema, verifier: z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/) }).parse(await body(request, 1024));
@@ -88,14 +97,15 @@ export async function mobileGoogleBrowser(request: Request) {
     if (request.method === "GET" && operation === "finish") {
       if (url.searchParams.has("failed")) {
         await flows().updateOne(filter, { $set: { failed: true } });
-        return page("Google sign-in was cancelled or declined. Close this browser and try again in Bookified.");
+        return page("Google sign-in was cancelled or declined. Return to Bookified to try again.", flow.returnUrl ? `<a href="${flow.returnUrl}">Return to app</a>` : "");
       }
       const session = await auth.api.getSession({ headers: request.headers });
       if (!session || !flow.startedAt || session.session.id === flow.priorSessionId || new Date(session.session.createdAt).getTime() < flow.startedAt.getTime()) return page("No completed Google sign-in was found. Return to Bookified and try again.", "", 401);
       const { token } = await auth.api.generateOneTimeToken({ headers: request.headers });
       const saved = await flows().updateOne(filter, { $set: { ott: token, expiresAt: new Date(Date.now() + 120000) } });
       if (!saved.modifiedCount) return page("This sign-in has already completed. Return to Bookified.", "", 409);
-      const response = page("Google sign-in is complete. Close this browser with the X or Back button to return to Bookified. Your library will open in the app.");
+      const response = page("Authenticated. You can return to the app.", flow.returnUrl ? `<a href="${flow.returnUrl}">Return to app</a>` : "", 200,
+        flow.returnUrl ? `<meta http-equiv="refresh" content="0;url=${flow.returnUrl}">` : "");
       response.headers.append("Set-Cookie", `${cookieName}=; Path=/api/mobile/oauth; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
       return response;
     }
