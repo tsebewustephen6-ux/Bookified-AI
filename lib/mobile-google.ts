@@ -82,7 +82,7 @@ export async function mobileGoogleBrowser(request: Request) {
       const callback = browserUrl(flowId, "finish");
       const result = await auth.handler(new Request(new URL("/api/auth/sign-in/social", baseUrl()), {
         method: "POST", headers: { "Content-Type": "application/json", Origin: baseUrl().origin, Cookie: request.headers.get("cookie") || "" },
-        body: JSON.stringify({ provider: "google", callbackURL: callback.toString(), errorCallbackURL: callback + "&failed=1", additionalParams: { prompt: "select_account" } }),
+        body: JSON.stringify({ provider: "google", callbackURL: callback.toString(), newUserCallbackURL: callback.toString(), errorCallbackURL: callback + "&failed=1", additionalParams: { prompt: "select_account" } }),
       }));
       if (!result.ok) return page("Google sign-in could not start. Return to Bookified and try again.", "", 502);
       const data = await result.json();
@@ -104,8 +104,10 @@ export async function mobileGoogleBrowser(request: Request) {
       const { token } = await auth.api.generateOneTimeToken({ headers: request.headers });
       const saved = await flows().updateOne(filter, { $set: { ott: token, expiresAt: new Date(Date.now() + 120000) } });
       if (!saved.modifiedCount) return page("This sign-in has already completed. Return to Bookified.", "", 409);
-      const response = page("Authenticated. You can return to the app.", flow.returnUrl ? `<a href="${flow.returnUrl}">Return to app</a>` : "", 200,
-        flow.returnUrl ? `<meta http-equiv="refresh" content="0;url=${flow.returnUrl}">` : "");
+      // Complete the HTTP redirect chain back to the experience. HTML refreshes
+      // are not a reliable OAuth return mechanism in Android custom tabs.
+      const response = page("Authenticated. You can return to the app.", flow.returnUrl ? `<a href="${flow.returnUrl}">Return to app</a>` : "", flow.returnUrl ? 303 : 200);
+      if (flow.returnUrl) response.headers.set("Location", flow.returnUrl);
       response.headers.append("Set-Cookie", `${cookieName}=; Path=/api/mobile/oauth; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
       return response;
     }

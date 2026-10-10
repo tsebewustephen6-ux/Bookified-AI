@@ -75,6 +75,53 @@ beforeAll(async () => {
 });
 afterAll(async () => { await mongoose.disconnect(); await client?.close(); await mongo?.stop(); });
 describe('native signed sessions and shared backend', () => {
+  it('routes the real OAuth callback for both new and returning Google users into the native handoff exactly once', async () => {
+    const originalAuth = state.auth;
+    const callbackAuth = betterAuth({ baseURL: origin, secret: process.env.BETTER_AUTH_SECRET,
+      database: mongodbAdapter(client.db(), { client }), emailAndPassword: { enabled: true },
+      socialProviders: { google: { clientId: 'synthetic-google-client', clientSecret: 'synthetic-google-secret' } },
+      plugins: [bearer({ requireSignature: true }), oneTimeToken({ disableClientRequest: true, storeToken: 'hashed', expiresIn: 2 })],
+    });
+    const context = await callbackAuth.$context;
+    let mocked = false;
+    for (const provider of context.socialProviders) {
+      if (provider.id !== 'google') continue;
+      vi.spyOn(provider, 'validateAuthorizationCode').mockResolvedValue({ accessToken: 'synthetic-provider-token', scopes: ['email', 'profile', 'openid'] });
+      vi.spyOn(provider, 'getUserInfo').mockResolvedValue({ user: { name: 'Google callback fixture', email: 'real-callback@fixture.example', emailVerified: true }, data: { sub: 'synthetic-google-subject', email: 'real-callback@fixture.example', email_verified: true } });
+      mocked = true;
+    }
+    expect(mocked).toBe(true);
+    state.auth = callbackAuth;
+    const jar = new Map<string, string>();
+    const receive = (response: Response) => { for (const value of response.headers.getSetCookie()) { const pair = value.split(';')[0]; const i = pair.indexOf('='); jar.set(pair.slice(0, i), pair.slice(i + 1)); } };
+    const cookies = () => [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
+    try {
+      let owner = '';
+      for (const kind of ['new', 'returning']) {
+        const verifier = randomBytes(32).toString('hex');
+        const challenge = createHash('sha256').update(verifier).digest('base64url');
+        const returnUrl = 'exps://owned-preview.exp.direct/--/sign-in';
+        const start = await call('auth/google/start', undefined, { challenge, returnUrl });
+        const { flowId, browserUrl } = await start.json();
+        const opened = await mobileGoogleBrowser(new Request(browserUrl, { headers: { Cookie: cookies() } }));
+        expect(opened.status, kind).toBe(303); receive(opened);
+        const authorization = new URL(opened.headers.get('location')!);
+        const callback = await callbackAuth.handler(new Request(origin + '/api/auth/callback/google?code=synthetic-code&state=' + authorization.searchParams.get('state'), { headers: { Cookie: cookies() } }));
+        expect(callback.status, kind).toBe(302); receive(callback);
+        const finish = new URL(callback.headers.get('location')!);
+        expect(finish.pathname, kind).toBe('/api/mobile/oauth'); expect(finish.searchParams.get('operation')).toBe('finish'); expect(finish.searchParams.get('flow')).toBe(flowId);
+        const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: cookies() } }));
+        expect(completed.status, kind).toBe(303); receive(completed);
+        expect(completed.headers.get('location'), kind).toBe(returnUrl);
+        expect(await completed.text()).toContain('Authenticated. You can return to the app.');
+        const exchanged = await call('auth/google/exchange', undefined, { flowId, verifier });
+        expect(exchanged.status, kind).toBe(200); const session = await exchanged.json();
+        if (owner) expect(session.data.user.id).toBe(owner); else owner = session.data.user.id;
+        expect((await call('account', session.token)).status).toBe(200);
+        expect((await call('auth/google/exchange', undefined, { flowId, verifier })).status).toBe(401);
+      }
+    } finally { state.auth = originalAuth; vi.restoreAllMocks(); }
+  });
   it('signs in with a real email/password session and rejects incorrect credentials', async () => {
     const registered = await register('email-login');
     await call('auth/sign-out', registered.token, {});
@@ -125,11 +172,12 @@ describe('native signed sessions and shared backend', () => {
     const freshCookie = fresh.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: freshCookie } }))).status).toBe(403);
     const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + freshCookie } }));
-    expect(completed.status).toBe(200);
+    expect(completed.status).toBe(303);
+    expect(completed.headers.get('location')).toBe(returnUrl);
     const completedHtml = await completed.text();
     expect(completedHtml).toContain('Authenticated. You can return to the app.');
     expect(completedHtml).toContain(`<a href="${returnUrl}">Return to app</a>`);
-    expect(completedHtml).toContain(`content="0;url=${returnUrl}"`);
+    expect(completedHtml).not.toContain('http-equiv="refresh"');
     expect(completedHtml).not.toMatch(/Close this browser|X or Back|session_token/);
     const exchanged = await call('auth/google/exchange', undefined, { flowId, verifier });
     expect(exchanged.status).toBe(200);
