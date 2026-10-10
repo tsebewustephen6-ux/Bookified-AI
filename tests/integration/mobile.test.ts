@@ -7,6 +7,7 @@ import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { bearer, oneTimeToken } from 'better-auth/plugins';
 import { createHash, randomBytes } from 'node:crypto';
+import { chromium } from '@playwright/test';
 import { mobileGoogleBrowser } from '../../lib/mobile-google';
 import { connect } from '../../database/connection';
 import { models, Book } from '../../database/models';
@@ -111,8 +112,8 @@ describe('native signed sessions and shared backend', () => {
         const finish = new URL(callback.headers.get('location')!);
         expect(finish.pathname, kind).toBe('/api/mobile/oauth'); expect(finish.searchParams.get('operation')).toBe('finish'); expect(finish.searchParams.get('flow')).toBe(flowId);
         const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: cookies() } }));
-        expect(completed.status, kind).toBe(303); receive(completed);
-        expect(completed.headers.get('location'), kind).toBe(returnUrl);
+        expect(completed.status, kind).toBe(200); receive(completed);
+        expect(completed.headers.get('location'), kind).toBeNull();
         expect(await completed.text()).toContain('Authenticated. You can return to the app.');
         const exchanged = await call('auth/google/exchange', undefined, { flowId, verifier });
         expect(exchanged.status, kind).toBe(200); const session = await exchanged.json();
@@ -172,13 +173,41 @@ describe('native signed sessions and shared backend', () => {
     const freshCookie = fresh.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     expect((await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: freshCookie } }))).status).toBe(403);
     const completed = await mobileGoogleBrowser(new Request(finish, { headers: { Cookie: browserCookie + '; ' + freshCookie } }));
-    expect(completed.status).toBe(303);
-    expect(completed.headers.get('location')).toBe(returnUrl);
+    expect(completed.status).toBe(200);
+    expect(completed.headers.get('location')).toBeNull();
     const completedHtml = await completed.text();
     expect(completedHtml).toContain('Authenticated. You can return to the app.');
     expect(completedHtml).toContain(`<a href="${returnUrl}">Return to app</a>`);
     expect(completedHtml).not.toContain('http-equiv="refresh"');
+    const nonce = completedHtml.match(/<script nonce="([A-Za-z0-9+/=]+)">/)?.[1];
+    expect(nonce).toBeTruthy();
+    expect(completed.headers.get('content-security-policy')).toContain(`script-src 'nonce-${nonce}'`);
+    expect(completedHtml).toContain(`window.location.replace(${JSON.stringify(returnUrl)})`);
+    expect(completedHtml).toContain("window.addEventListener('load'");
     expect(completedHtml).not.toMatch(/Close this browser|X or Back|session_token/);
+    // A browser without the native app must keep a visible fallback document.
+    // Verify the exact response's CSP allows its automatic-return script.
+    const chrome = await chromium.launch();
+    try {
+      const tab = await chrome.newPage({ viewport: { width: 375, height: 812 } });
+      await tab.addInitScript(() => {
+        const schedule = window.setTimeout;
+        window.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+          if (delay === 250 && typeof handler === 'function') return schedule(() => {
+            document.documentElement.dataset.returnAttempted = 'true'; handler(...args);
+          }, delay);
+          return schedule(handler, delay, ...args);
+        }) as typeof window.setTimeout;
+      });
+      await tab.route(origin + '/completion-fixture', route => route.fulfill({ status: completed.status,
+        headers: { 'content-type': completed.headers.get('content-type')!, 'content-security-policy': completed.headers.get('content-security-policy')! }, body: completedHtml }));
+      await tab.goto(origin + '/completion-fixture');
+      await tab.waitForFunction(() => document.documentElement.dataset.returnAttempted === 'true');
+      expect(await tab.locator('body').innerText()).toContain('Authenticated. You can return to the app.');
+      expect(await tab.getByRole('link', { name: 'Return to app' }).getAttribute('href')).toBe(returnUrl);
+      expect(tab.url()).toBe(origin + '/completion-fixture');
+      await tab.screenshot({ path: '.test-data/mobile-auth-return-375.png' });
+    } finally { await chrome.close(); }
     const exchanged = await call('auth/google/exchange', undefined, { flowId, verifier });
     expect(exchanged.status).toBe(200);
     expect(exchanged.headers.get('set-cookie')).toBeNull();

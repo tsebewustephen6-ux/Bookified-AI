@@ -104,10 +104,13 @@ export async function mobileGoogleBrowser(request: Request) {
       const { token } = await auth.api.generateOneTimeToken({ headers: request.headers });
       const saved = await flows().updateOne(filter, { $set: { ott: token, expiresAt: new Date(Date.now() + 120000) } });
       if (!saved.modifiedCount) return page("This sign-in has already completed. Return to Bookified.", "", 409);
-      // Complete the HTTP redirect chain back to the experience. HTML refreshes
-      // are not a reliable OAuth return mechanism in Android custom tabs.
-      const response = page("Authenticated. You can return to the app.", flow.returnUrl ? `<a href="${flow.returnUrl}">Return to app</a>` : "", flow.returnUrl ? 303 : 200);
-      if (flow.returnUrl) response.headers.set("Location", flow.returnUrl);
+      // Commit an HTTPS document before opening an external scheme. Android
+      // can block an external Location at the end of Google's redirect chain,
+      // leaving the previous Google page visible and hiding any fallback body.
+      const nonce = randomBytes(18).toString("base64");
+      const response = page("Authenticated. You can return to the app.", flow.returnUrl ? `<a href="${flow.returnUrl}">Return to app</a>` : "", 200,
+        flow.returnUrl ? `<script nonce="${nonce}">window.addEventListener('load',function(){setTimeout(function(){window.location.replace(${JSON.stringify(flow.returnUrl)});},250);},{once:true});</script>` : "");
+      if (flow.returnUrl) response.headers.set("Content-Security-Policy", response.headers.get("Content-Security-Policy") + `; script-src 'nonce-${nonce}'`);
       response.headers.append("Set-Cookie", `${cookieName}=; Path=/api/mobile/oauth; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
       return response;
     }
