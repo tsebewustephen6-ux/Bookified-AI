@@ -102,7 +102,7 @@ test('Google button opens the first-party browser and accepts a PKCE-bound fixtu
   await expect(page.getByText('Your library', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.body.dataset.googleBrowserUrl)).toContain('/api/mobile/oauth?operation=browser');
 });
-test('Google waiting state can be cancelled without signing in', async ({ page }) => {
+test('Google waiting state shows only disabled loading without cancel or browser guidance', async ({ page }) => {
   await page.addInitScript(() => { window.open = () => null; });
   await page.route('**/api/mobile/auth/google/exchange', async route => {
     const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
@@ -114,9 +114,10 @@ test('Google waiting state can be cancelled without signing in', async ({ page }
   await page.screenshot({ path: '.test-data/mobile-google-sign-in.png' });
   await page.getByRole('button', { name: 'Continue with Google', exact: true }).click();
   await expect(page.getByText('Finish signing in in the browser, then close it to return here.')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Cancel Google sign-in' }).click();
-  await expect(page.getByRole('alert')).toContainText('Google sign-in was cancelled');
-  await expect(page.getByRole('button', { name: 'Continue with Google', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Signing in/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Cancel Google sign-in' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Please wait…' })).toBeDisabled();
+  await page.screenshot({ path: '.test-data/mobile-google-loading.png' });
 });
 test('native screens consume the shared API shape, search books and sign out', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
