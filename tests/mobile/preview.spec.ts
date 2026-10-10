@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 const user = { id: 'synthetic-reader', name: 'Synthetic Reader', email: 'reader@fixture.example' };
 const token = 'synthetic-signed-session.only-browser-fixture-2468';
-const book = { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', slug: 'velorinth-fixture', title: 'The Velorinth Notebook', author: 'Synthetic author', personaId: 'fixture', status: 'ready', pageCount: 3, segmentCount: 1, hasCover: false };
+const book = { id: 'aaaaaaaaaaaaaaaaaaaaaaaa', slug: 'velorinth-fixture', title: 'The Velorinth Notebook', author: 'Synthetic author', personaId: 'fixture', status: 'ready', pageCount: 3, segmentCount: 1, hasCover: true };
+const secondBook = { ...book, id: 'bbbbbbbbbbbbbbbbbbbbbbbb', slug: 'second-fixture', title: 'A second book with a longer title', hasCover: false };
 test.beforeEach(async ({ page }) => {
   let googleChallenge = '';
   await page.route('https://bookified-beige-six.vercel.app/api/mobile/**', async (route) => {
@@ -26,7 +27,8 @@ test.beforeEach(async ({ page }) => {
     } else {
       if (request.headers().authorization !== 'Bearer ' + token) { await route.fulfill({ status: 401, headers, json: { error: { message: 'Sign in to continue.' } } }); return; }
       if (path === '/account') result = { user, plan: 'free', limits: { books: 1, sessions: 5, duration: 300 }, usage: { books: 1, connected: 2, reserved: 0, resetAt: '2026-11-01T00:00:00Z' }, voices: [{ id: 'fixture', name: 'Nova', description: 'Synthetic voice catalog' }] };
-      else if (path === '/books') { const books = url.searchParams.get('q') && !book.title.toLowerCase().includes(url.searchParams.get('q')!.toLowerCase()) ? [] : [book]; result = { books, total: books.length }; }
+      else if (path === '/books') { const query = (url.searchParams.get('q') || '').toLowerCase(); const books = [book, secondBook].filter(item => !query || (item.title + ' ' + item.author).toLowerCase().includes(query)); result = { books, total: books.length }; }
+      else if (path === '/books/' + book.id + '/cover') { await route.fulfill({ headers, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="150"><rect width="100" height="150" fill="#795744"/></svg>' }); return; }
       else if (path === '/books/' + book.id) result = { book, progress: null };
       else if (path === '/auth/sign-out') result = { data: { success: true } };
       else { await route.fulfill({ status: 404, headers, json: { error: { message: 'Fixture operation unavailable.' } } }); return; }
@@ -128,7 +130,7 @@ test('native screens consume the shared API shape, search books and sign out', a
   await expect(page.getByText('Between the words', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start conversation' })).toBeVisible();
   await page.screenshot({ path: '.test-data/mobile-conversation.png', fullPage: true });
-  await page.getByRole('button', { name: 'Back to library' }).click();
+  await page.getByRole('link', { name: /, back$/ }).click();
   await page.getByRole('tab', { name: /Settings/ }).click();
   await expect(page.getByText(user.email, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -139,6 +141,29 @@ test('add-book form uses backend voices and rejects missing PDF metadata', async
   await signIn(page);
   await page.getByRole('button', { name: 'Add a book', exact: true }).click();
   await expect(page.getByRole('button', { name: /Nova/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Choose a cover/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to library' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Begin synthesis' }).click();
   await expect(page.getByRole('alert')).toContainText('Choose a PDF');
+  await page.getByRole('link', { name: /, back$/ }).click();
+  await expect(page.getByText('Your library', { exact: true })).toBeVisible();
+});
+test('library shows authenticated covers in two equal columns and keeps navigation reachable', async ({ page }) => {
+  await signIn(page);
+  for (const width of [320, 375, 768]) {
+    await page.setViewportSize({ width, height: 812 });
+    const first = page.getByRole('button', { name: 'Open ' + book.title });
+    const second = page.getByRole('button', { name: 'Open ' + secondBook.title });
+    await expect(first.getByRole('img', { name: 'Cover of ' + book.title })).toBeVisible();
+    const a = (await first.boundingBox())!; const b = (await second.boundingBox())!;
+    expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+    expect(Math.abs(a.width - b.width)).toBeLessThan(1);
+    expect(b.x).toBeGreaterThan(a.x + a.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const settingsTab = page.getByRole('tab', { name: /Settings/ });
+    await expect(settingsTab).toBeInViewport();
+    const label = (await settingsTab.getByText('Settings', { exact: true }).boundingBox())!;
+    expect(label.y + label.height).toBeLessThanOrEqual(812);
+    await page.screenshot({ path: `.test-data/mobile-library-fixed-${width}.png`, fullPage: true });
+  }
 });
