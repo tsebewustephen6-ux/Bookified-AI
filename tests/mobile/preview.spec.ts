@@ -129,13 +129,38 @@ test('native screens consume the shared API shape, search books and sign out', a
   await page.getByPlaceholder('Search title or author').fill('');
   await page.getByRole('button', { name: 'Open ' + book.title }).click();
   await expect(page.getByText('Between the words', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start conversation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start microphone conversation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start microphone conversation' })).toBeEnabled();
   await page.screenshot({ path: '.test-data/mobile-conversation.png', fullPage: true });
   await page.getByRole('link', { name: /, back$/ }).click();
   await page.getByRole('tab', { name: /Settings/ }).click();
   await expect(page.getByText(user.email, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('link', { name: /Start your story/ })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('phone book controls stay visible and a rejected admission is recoverable without a blank panel', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
+  });
+  let admissions = 0;
+  await page.route('**/api/mobile/books/' + book.id + '/sessions', async route => {
+    const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' };
+    if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return; }
+    admissions++;
+    await route.fulfill({ status: 403, headers, json: { error: { message: 'Session quota reached. Try again after your usage resets.', code: 'QUOTA_REACHED' } } });
+  });
+  await signIn(page); await page.getByRole('button', { name: 'Open ' + book.title }).click();
+  const start = page.getByRole('button', { name: 'Start microphone conversation' });
+  await expect(start).toBeEnabled(); expect((await start.boundingBox())!.y).toBeLessThan(812);
+  await expect(page.getByText('00:00 / 05:00', { exact: true })).toBeVisible();
+  await start.click(); await expect(page.getByRole('alert')).toContainText('Session quota reached');
+  await expect(start).toBeEnabled(); await start.click(); await expect.poll(() => admissions).toBe(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '.test-data/mobile-book-controls-375.png', fullPage: true });
   expect(errors).toEqual([]);
 });
 test('add-book form uses backend voices and rejects missing PDF metadata', async ({ page }) => {
