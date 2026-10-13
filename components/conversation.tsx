@@ -12,26 +12,41 @@ function time(seconds: number) {
 export function Conversation(props: { bookId: string; limit: number; voiceName: string }) {
   const saved = useConversationHistory(props.bookId);
   const refresh = saved.refresh;
+  const controls = useRef<HTMLDivElement>(null);
+  async function select(id: string) {
+    if (await saved.select(id)) requestAnimationFrame(() => {
+      controls.current?.focus({ preventScroll: true });
+      controls.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    });
+  }
   const [active, setActive] = useState(false); const wasActive = useRef(false);
   useEffect(() => { if (wasActive.current && !active) void refresh(); wasActive.current = active; }, [active, refresh]);
-  return <div>
-    <section className="voice-console" style={{ marginBottom: 20 }}>
+  return <div className="conversation-layout">
+    <div ref={controls} tabIndex={-1} className="conversation-main">
+    <section className="conversation-context">
       <h2>Your conversations</h2>
-      <p>{saved.selected ? 'Continuing a saved conversation' : 'Starting from the beginning'}. Each new call has its own plan time limit.</p>
-      <button type="button" className="btn btn-secondary" disabled={active || saved.loading} onClick={saved.fresh}>Start from beginning</button>{' '}
-      <button type="button" className="btn btn-secondary" disabled={active || saved.loading} onClick={() => void saved.refresh()}>Refresh saved conversations</button>
+      <p role="status">{saved.selected ? 'Continuing a saved conversation' : 'Starting from the beginning'}. Each new call has its own plan time limit.</p>
+      <p>Your saved text stays here after a call ends or your monthly usage resets.</p>
+      <div className="conversation-actions">
+      {saved.latest && saved.latest.id !== saved.selected?.id ? <button type="button" className="button button-primary" disabled={active || saved.loading} onClick={() => void select(saved.latest!.id)}>Continue latest conversation</button> : null}
+      <button type="button" className="button button-outline" disabled={active || saved.loading} onClick={saved.fresh}>Start from beginning</button>
+      </div>
       {saved.loading ? <p role="status">Loading conversations…</p> : null}
       {saved.error ? <p role="alert" className="error-message">{saved.error}</p> : null}
     </section>
     <LiveConversation key={`${props.bookId}:${saved.revision}`} {...props} selectionPending={saved.loading} resumeFrom={saved.selected?.id} savedMessages={saved.selected?.messages} onActiveChange={setActive} />
-    <section className="voice-console" style={{ marginTop: 20 }}><h2>Saved sessions</h2>
+    </div>
+    <section className="conversation-history" aria-label="Saved conversations"><h2>Saved conversations</h2>
+      <p>Choose a previous call to read its transcript and pick up the discussion.</p>
+      <button type="button" className="button button-outline" disabled={active || saved.loading} onClick={() => void saved.refresh()}>Refresh saved conversations</button>
       {!saved.loading && !saved.error && !saved.history.items.length ? <p>No saved conversations yet.</p> : null}
-      {saved.history.items.map(item => <article key={item.id} style={{ marginTop: 16 }}>
-        <p>{new Date(item.date).toLocaleString()} · {Math.ceil(item.durationSeconds / 60)} min · {item.status}</p>
-        <p>{item.preview || 'No saved text is available for this session.'}</p>
-        <button type="button" className="btn btn-secondary" disabled={active || saved.loading || !item.hasTranscript || ['active', 'reserved'].includes(item.status)} onClick={() => void saved.select(item.id)}>View and continue conversation</button>
+      {saved.history.items.map(item => <article key={item.id} className={`conversation-history-item${item.id === saved.selected?.id ? ' selected' : ''}`}>
+        <h3>{new Date(item.date).toLocaleString()}</h3>
+        <p className="conversation-meta">{Math.ceil(item.durationSeconds / 60)} min · {['active', 'reserved'].includes(item.status) ? 'Call in progress' : item.hasTranscript ? 'Saved conversation' : 'No saved transcript'}{item.id === saved.selected?.id ? ' · Selected' : ''}</p>
+        <p className="conversation-preview">{item.preview || 'No saved text is available for this session.'}</p>
+        <button type="button" className="button button-outline" aria-pressed={item.id === saved.selected?.id} disabled={active || saved.loading || !item.hasTranscript || ['active', 'reserved'].includes(item.status)} onClick={() => void select(item.id)}>{item.id === saved.selected?.id ? 'Selected conversation' : 'View and continue conversation'}</button>
       </article>)}
-      {saved.history.nextCursor ? <button type="button" className="btn btn-secondary" disabled={active || saved.loading} onClick={() => void saved.refresh(saved.history.nextCursor!)}>Older conversations</button> : null}
+      {saved.history.nextCursor ? <button type="button" className="button button-outline" disabled={active || saved.loading} onClick={() => void saved.refresh(saved.history.nextCursor!)}>Older conversations</button> : null}
     </section>
   </div>;
 }
@@ -68,6 +83,7 @@ function LiveConversation({
           {call.state === "idle" ? "Ready when you are" : call.state} ·{" "}
           {voiceName}
         </p>
+        {!call.active && (resumeFrom || call.elapsed > 0) ? <p className="conversation-resume" role="status">{call.elapsed > 0 ? 'This call has ended. ' : ''}Press the microphone to continue the discussion with a new time limit.</p> : null}
         <button
           className="mic-button"
           type="button"

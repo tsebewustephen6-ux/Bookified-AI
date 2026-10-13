@@ -125,12 +125,16 @@ test('Google waiting state shows only disabled loading without cancel or browser
 test('saved per-book conversation loads its transcript and can be reset without starting a call', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await signIn(page); await page.getByRole('button', { name: 'Open ' + book.title }).click();
-  await page.getByRole('button', { name: 'View and continue conversation' }).click();
+  await page.getByRole('button', { name: 'Continue latest conversation' }).click();
   await expect(page.getByText('Teach me the Beryl sequence', { exact: true })).toBeVisible();
   await expect(page.getByText('Continuing a saved conversation', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Selected conversation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start microphone conversation' })).toBeInViewport();
+  await page.screenshot({ path: '.test-data/mobile-history-selected.png', fullPage: true });
   await page.getByRole('button', { name: 'Start from beginning' }).click();
   await expect(page.getByText('Teach me the Beryl sequence', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start microphone conversation' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'View and continue conversation' })).toBeVisible();
 });
 test('native screens consume the shared API shape, search books and sign out', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));

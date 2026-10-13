@@ -210,6 +210,25 @@ describe("real MongoDB transactions and scoped text index", () => {
     browser.owner = 'history-other';
     expect((await historyRoute(new Request('https://bookified.example/api/books/' + book._id + '/sessions'), context)).status).toBe(404);
   });
+  it('keeps history resumable across a monthly reset while enforcing the current quota', async () => {
+    const owner = 'history-month-reset';
+    const book = await ready(owner);
+    const current = utcPeriod();
+    const previousStart = new Date(Date.UTC(current.start.getUTCFullYear(), current.start.getUTCMonth() - 1, 1));
+    const saved = await VoiceSession.create({ ownerId: owner, bookId: book._id, status: 'ended', reservedAt: previousStart, startedAt: previousStart, endedAt: new Date(previousStart.getTime() + 300000), counted: true, durationSeconds: 300, maxDurationSeconds: 300, planAtStart: 'free', usagePeriodStart: previousStart, usagePeriodEnd: current.start, idempotencyKey: crypto.randomUUID(), expiresAt: new Date(previousStart.getTime() + 480000), transcript: [{ role: 'user', text: 'Where did we leave off?' }] });
+    await Usage.create({ ownerId: owner, periodStart: previousStart, connected: 5, reserved: 0 });
+    browser.owner = owner;
+    const selected = await historyRoute(new Request(`https://bookified.example/api/books/${book._id}/sessions?session=${saved._id}`), { params: Promise.resolve({ id: book._id.toString() }) });
+    expect(selected.status).toBe(200);
+    expect(selected.headers.get('Cache-Control')).toBe('no-store');
+    expect((await selected.json()).messages[0].text).toBe('Where did we leave off?');
+    const resumed = await reserveSession(owner, book._id.toString(), 'free', crypto.randomUUID(), saved._id.toString());
+    expect(resumed.maxDurationSeconds).toBe(300); expect(resumed.usagePeriodStart).toEqual(current.start);
+    await accountSession(resumed._id.toString(), new Date(), new Date());
+    await Usage.updateOne({ ownerId: owner, periodStart: current.start }, { $set: { connected: 5 } });
+    await expect(reserveSession(owner, book._id.toString(), 'free', crypto.randomUUID(), saved._id.toString())).rejects.toThrow('monthly conversations');
+    expect(await VoiceSession.exists({ _id: saved._id, 'transcript.0': { $exists: true } })).toBeTruthy();
+  });
   it("rejects an unconfigured persona before taking a slot", async () => {
     await expect(
       admitBook("unconfigured", "free", {

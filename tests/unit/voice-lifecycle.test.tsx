@@ -72,6 +72,19 @@ it('resumes the selected saved session and keeps its visible transcript when sta
   const admissions = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/sessions'));
   expect(JSON.parse(String(admissions.at(-1)?.[1]?.body)).resumeFrom).toBe('session-fixture');
 });
+it('continues the same discussion after the duration limit with a fresh admission and timer', async () => {
+  const { result } = renderHook(() => useVoice('book-fixture', 300));
+  await act(async () => result.current.start());
+  await act(async () => fixture.clients[0].emit('message', { type: 'transcript', role: 'user', transcriptType: 'final', transcript: 'Explain the second step' }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300000); });
+  expect(result.current.active).toBe(false); expect(result.current.messages[0].text).toBe('Explain the second step');
+  await act(async () => result.current.start());
+  const admissions = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/sessions'));
+  const first = JSON.parse(String(admissions[0][1]?.body)); const next = JSON.parse(String(admissions[1][1]?.body));
+  expect(next.resumeFrom).toBe('session-fixture'); expect(next.idempotencyKey).not.toBe(first.idempotencyKey);
+  expect(result.current.elapsed).toBe(0); expect(result.current.maxDuration).toBe(300);
+  expect(result.current.messages[0].text).toBe('Explain the second step');
+});
 it("Strict Mode creates no call until requested and unmount removes listeners and stops once", async () => {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <StrictMode>{children}</StrictMode>
