@@ -8,7 +8,8 @@ import { Button } from "./ui/button";
 export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect") || "/library";
+  const target = searchParams.get("redirect");
+  const redirectUrl = target?.startsWith('/') && !target.startsWith('//') && !target.includes('\\') ? target : '/library';
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,12 +17,17 @@ export function SignInForm() {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
+    setError(null);
     setLoading(true);
     try {
-      await signIn.social({
+      const result = await signIn.social({
         provider: "google",
         callbackURL: redirectUrl,
       });
+      if (result.error) {
+        setError(result.error.message || 'Google Sign-In could not start. Please try again.');
+        setLoading(false);
+      }
     } catch {
       setError("An unexpected error occurred with Google Sign-In.");
       setLoading(false);

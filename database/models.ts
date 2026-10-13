@@ -89,6 +89,7 @@ const sessionSchema = new Schema(
     capabilityHash: String,
     expiresAt: Date,
     resumeFrom: { type: Schema.Types.ObjectId },
+    name: { type: String, maxlength: 80 },
     transcript: { type: [new Schema({ role: { type: String, enum: ['user', 'assistant'], required: true }, text: { type: String, required: true } }, { _id: false })], default: [] },
     transcriptRevision: { type: Number, default: 0 },
     transcriptComplete: { type: Boolean, default: false },

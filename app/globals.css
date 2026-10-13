@@ -1003,7 +1003,7 @@ nav {
   }
 }
 
-.conversation-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 330px); gap: 24px; align-items: start; }
+.conversation-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
 .conversation-main { min-width: 0; scroll-margin-top: 24px; }
 .conversation-context { padding: 0 0 24px; }
 .conversation-context h2, .conversation-history h2 { font-size: 24px; margin-bottom: 10px; }
@@ -1022,3 +1022,22 @@ nav {
   .conversation-layout { grid-template-columns: minmax(0, 1fr); }
   .conversation-actions .button { flex: 1 1 220px; white-space: normal; }
 }
+
+.conversation-layout.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
+.conversation-toolbar { margin-bottom: 20px; }
+.conversation-desktop-history { position: sticky; top: 24px; max-height: calc(100dvh - 48px); overflow-y: auto; }
+.conversation-history-select { display: flex; flex-direction: column; gap: 8px; width: 100%; min-height: 44px; text-align: left; background: transparent; color: inherit; border: 0; cursor: pointer; padding: 8px; border-radius: 8px; overflow-wrap: anywhere; }
+.conversation-history-select:hover { background: var(--border); }
+.conversation-history-select:disabled { cursor: default; opacity: .55; }
+.conversation-history-select time { color: var(--muted); font-size: 12px; }
+.conversation-history-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.conversation-mobile-toggle { display: none; }
+.conversation-picker { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; border: 0; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); background: var(--background, #faf7f2); color: var(--foreground, #242424); overflow-y: auto; overscroll-behavior: contain; }
+.conversation-picker .conversation-history { border: 0; padding: 24px 0; }
+body:has(.conversation-picker[open]) { overflow: hidden; }
+@media (max-width: 1000px) {
+  .conversation-desktop-history, .conversation-desktop-toggle { display: none; }
+  .conversation-mobile-toggle { display: inline-flex; }
+}
+
+.conversation-context h2 { overflow-wrap: anywhere; }

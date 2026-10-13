@@ -7,6 +7,7 @@ import { sameOrigin, body, rateLimit } from "@/lib/security";
 import { failure, AppError } from "@/lib/errors";
 import { VoiceSession } from '@/database/models';
 import { idSchema } from '@/lib/validation';
+import { conversationName } from '@/lib/conversation-history';
 export const runtime = "nodejs";
 export async function POST(
   request: Request,
@@ -52,7 +53,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       if (!record) throw new AppError('NOT_FOUND', 'Conversation not found.', 404);
       return Response.json({ id: selected, messages: record.transcript || [], resumeFrom: record.resumeFrom?.toString() || null }, { headers: { 'Cache-Control': 'no-store' } });
     }
-    const records = await VoiceSession.find({ ...scope, ...(cursor ? { _id: { $lt: cursor } } : {}) }).select('reservedAt status durationSeconds transcript').slice('transcript', -1).sort({ _id: -1 }).limit(21).lean();
-    return Response.json({ items: records.slice(0, 20).map(record => ({ id: record._id.toString(), date: record.reservedAt.toISOString(), status: record.status, durationSeconds: record.durationSeconds, preview: record.transcript?.[0]?.text.slice(0, 140) || '', hasTranscript: !!record.transcript?.length })), nextCursor: records.length > 20 ? records[19]._id.toString() : null }, { headers: { 'Cache-Control': 'no-store' } });
+    const records = await VoiceSession.find({ ...scope, ...(cursor ? { _id: { $lt: cursor } } : {}) }).select('name reservedAt status durationSeconds transcript').slice('transcript', 1).sort({ _id: -1 }).limit(21).lean();
+    return Response.json({ items: records.slice(0, 20).map(record => ({ id: record._id.toString(), name: record.name || conversationName((record.transcript || []).map(turn => ({ role: turn.role as 'user' | 'assistant', text: turn.text }))), date: record.reservedAt.toISOString(), status: record.status, durationSeconds: record.durationSeconds, preview: record.transcript?.[0]?.text.slice(0, 140) || '', hasTranscript: !!record.transcript?.length })), nextCursor: records.length > 20 ? records[19]._id.toString() : null }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return failure(error); }
 }

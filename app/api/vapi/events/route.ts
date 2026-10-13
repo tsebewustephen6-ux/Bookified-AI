@@ -2,7 +2,7 @@ import { z } from "zod";
 import { webhookSession, reconcileCall } from "@/lib/vapi";
 import { body } from "@/lib/security";
 import { failure, AppError } from "@/lib/errors";
-import { providerTurns } from '@/lib/conversation-history';
+import { providerTurns, conversationName } from '@/lib/conversation-history';
 import { VoiceSession } from '@/database/models';
 export async function POST(request: Request) {
   try {
@@ -24,6 +24,8 @@ export async function POST(request: Request) {
     const event = input.data.message;
     const messages = providerTurns(event.messagesOpenAIFormatted ?? event.artifact?.messagesOpenAIFormatted ?? event.messages ?? event.artifact?.messages);
     if (messages.length) {
+      // Set the first user topic once; subsequent transcript updates preserve it.
+      if (messages.some(turn => turn.role === 'user')) await VoiceSession.updateOne({ _id: record._id, ownerId: record.ownerId, name: { $exists: false } }, { $set: { name: conversationName(messages) } });
       const revision = event.timestamp ?? messages.length;
       await VoiceSession.updateOne({ _id: record._id, ownerId: record.ownerId, providerCallId: event.call.id,
         ...(event.type === 'end-of-call-report' ? {} : { transcriptComplete: { $ne: true }, transcriptRevision: { $lte: revision }, $expr: { $lte: [{ $size: { $ifNull: ['$transcript', []] } }, messages.length] } }) },

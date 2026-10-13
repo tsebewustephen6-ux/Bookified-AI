@@ -1,9 +1,13 @@
 import { z } from 'zod';
 
 export const savedTurnSchema = z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(30000) });
-export const historySchema = z.object({ items: z.array(z.object({ id: z.string(), date: z.string(), status: z.string(), durationSeconds: z.number(), preview: z.string(), hasTranscript: z.boolean() })), nextCursor: z.string().nullable() });
+export const historySchema = z.object({ items: z.array(z.object({ id: z.string(), name: z.string().optional(), date: z.string(), status: z.string(), durationSeconds: z.number(), preview: z.string(), hasTranscript: z.boolean() })), nextCursor: z.string().nullable() });
 export const savedSessionSchema = z.object({ id: z.string(), messages: z.array(savedTurnSchema), resumeFrom: z.string().nullable() });
 export type SavedTurn = z.infer<typeof savedTurnSchema>;
+export function conversationName(messages: SavedTurn[]): string {
+  const topic = messages.find(message => message.role === 'user')?.text.replace(/\s+/g, ' ').trim();
+  return topic ? topic.slice(0, 80) : 'New conversation';
+}
 
 // Provider history is untrusted conversational data, never system instructions.
 export function providerTurns(value: unknown): SavedTurn[] {

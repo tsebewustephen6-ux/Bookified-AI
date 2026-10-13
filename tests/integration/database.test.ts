@@ -183,11 +183,12 @@ describe("real MongoDB transactions and scoped text index", () => {
     expect((await eventsRoute(providerRequest('/api/vapi/events', payload, capability))).status).toBe(200);
     expect((await eventsRoute(providerRequest('/api/vapi/events', { message: { ...payload.message, timestamp: 100, messagesOpenAIFormatted: [{ role: 'user', content: 'older' }] } }, capability))).status).toBe(200);
     const saved = await VoiceSession.findById(session._id); expect(saved?.transcript).toHaveLength(2); expect(saved?.transcript[1].text).toContain('Step two');
+    expect(saved?.name).toBe('Explain Beryl steps');
     expect((await eventsRoute(providerRequest('/api/vapi/events', payload, 'foreign-capability'))).status).toBe(403);
     browser.owner = 'history-reader';
     const context = { params: Promise.resolve({ id: book._id.toString() }) };
     const listing = await historyRoute(new Request('https://bookified.example/api/books/' + book._id + '/sessions'), context);
-    expect((await listing.json()).items[0].hasTranscript).toBe(true);
+    expect((await listing.json()).items[0]).toMatchObject({ hasTranscript: true, name: 'Explain Beryl steps', date: session.reservedAt.toISOString() });
     const selected = await historyRoute(new Request('https://bookified.example/api/books/' + book._id + '/sessions?session=' + session._id), context);
     expect((await selected.json()).messages).toHaveLength(2);
     await accountSession(session._id.toString(), new Date(), new Date());

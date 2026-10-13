@@ -1,7 +1,13 @@
 import { expect, it } from 'vitest';
-import { providerTurns, resumeContext } from '../../lib/conversation-history';
+import { conversationName, providerTurns, resumeContext } from '../../lib/conversation-history';
 import { retrievalTerms, passageScore } from '../../lib/retrieval';
 import { teachingRules } from '../../lib/vapi';
+
+it('names a conversation from its first user topic with a bounded fallback', () => {
+  expect(conversationName([{ role: 'assistant', text: 'Welcome' }, { role: 'user', text: '  Explain\n the sequence  ' }, { role: 'user', text: 'Later topic' }])).toBe('Explain the sequence');
+  expect(conversationName([{ role: 'user', text: 'x'.repeat(200) }])).toHaveLength(80);
+  expect(conversationName([])).toBe('New conversation');
+});
 
 it('stores only conversational provider text, not system instructions or tools', () => {
   expect(providerTurns([{ role: 'system', content: 'secret' }, { role: 'user', content: 'Explain the sequence' }, { role: 'bot', message: 'Step one' }, { role: 'tool', content: 'private tool output' }])).toEqual([{ role: 'user', text: 'Explain the sequence' }, { role: 'assistant', text: 'Step one' }]);
