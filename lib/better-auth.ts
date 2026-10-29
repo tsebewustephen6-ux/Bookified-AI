@@ -1,37 +1,70 @@
 import { randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
-import { bearer, oneTimeToken } from "better-auth/plugins";
 import { MongoClient, type Db } from "mongodb";
 
 const globalMongo = globalThis as typeof globalThis & {
   _betterAuthMongoClient?: MongoClient;
 };
 
+function isClientClosed(client?: MongoClient): boolean {
+  if (!client) return true;
+  const topology = (client as unknown as { topology?: { s?: { state?: string } } }).topology;
+  if (!topology) return false;
+  const state = topology.s?.state;
+  return !topology.s || state === "closed" || state === "closing";
+}
+
 export function getMongoClient(): MongoClient {
-  if (!globalMongo._betterAuthMongoClient) {
+  const existing = globalMongo._betterAuthMongoClient;
+  if (!existing || isClientClosed(existing)) {
+    if (existing) {
+      try {
+        void existing.close().catch(() => {});
+      } catch {
+        // ignore close error
+      }
+    }
     const uri =
       process.env.MONGODB_URI || "mongodb://localhost:27017/bookified";
-    globalMongo._betterAuthMongoClient = new MongoClient(uri, {
+    const client = new MongoClient(uri, {
       serverSelectionTimeoutMS: 10000,
+      maxIdleTimeMS: 60000,
     });
+    globalMongo._betterAuthMongoClient = client;
+    return client;
   }
-  return globalMongo._betterAuthMongoClient;
+  return existing;
 }
 
 export function getAuthDb(): Db {
   return getMongoClient().db();
 }
 
-const client = getMongoClient();
-const db = getAuthDb();
+const dbProxy = new Proxy({} as Db, {
+  get(_target, prop) {
+    const activeDb = getMongoClient().db();
+    const value = (activeDb as any)[prop];
+    if (typeof value === "function") {
+      return value.bind(activeDb);
+    }
+    return value;
+  },
+});
+
+const clientProxy = new Proxy({} as MongoClient, {
+  get(_target, prop) {
+    const activeClient = getMongoClient();
+    const value = (activeClient as any)[prop];
+    if (typeof value === "function") {
+      return value.bind(activeClient);
+    }
+    return value;
+  },
+});
 
 export const auth = betterAuth({
-  plugins: [
-    bearer({ requireSignature: true }), 
-    oneTimeToken({ disableClientRequest: true, storeToken: "hashed", expiresIn: 2 })
-  ],
-  database: mongodbAdapter(db, { client }),
+  database: mongodbAdapter(dbProxy, { client: clientProxy }),
   secret:
     process.env.BETTER_AUTH_SECRET ||
     randomBytes(32).toString("hex"),
@@ -59,6 +92,4 @@ export const auth = betterAuth({
       },
     },
   },
-  // Native clients use the mobile bearer adapter, so no device/IP redirects are trusted.
-  trustedOrigins: [],
 });

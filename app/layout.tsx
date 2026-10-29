@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Navigation } from "@/components/navigation";
-import { Brand } from "@/components/brand";
+import { SiteShell } from "@/components/site-shell";
 import { authConfigured } from "@/lib/env";
 import { currentUser } from "@/lib/auth";
 import "./globals.css";
@@ -14,31 +13,13 @@ export const metadata: Metadata = {
   description: "Upload a book. Choose a voice. Talk to its contents.",
 };
 
-import { headers } from "next/headers";
-
 async function Shell({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  const headersList = await headers();
-  const userAgent = headersList.get("user-agent") || "";
-  const isNative = userAgent.includes("BookifiedMobileApp");
 
   return (
-    <>
-      <a className="skip-link" href="#main">
-        Skip to content
-      </a>
-      <Navigation user={user} configured={authConfigured()} isNative={isNative} />
-      <main id="main" className="main-wrap">
-        {children}
-      </main>
-      {!isNative && (
-        <footer className="site-footer">
-          <Brand compact />
-          <p>A little more conversation. A lot more understanding.</p>
-          <span>YOUR BOOKS, YOUR SPACE</span>
-        </footer>
-      )}
-    </>
+    <SiteShell user={user} configured={authConfigured()}>
+      {children}
+    </SiteShell>
   );
 }
 

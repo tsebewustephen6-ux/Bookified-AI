@@ -57,3 +57,38 @@ export async function POST(
     return failure(error);
   }
 }
+// Deleting erases conversation content permanently. The content-free record
+// remains so monthly usage, idempotency and provider reconciliation stay exact.
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    sameOrigin(request);
+    const id = (await context.params).id;
+    const record = await owned(id);
+    await rateLimit(record.ownerId, "delete-conversation", 30);
+    if (record.deletedAt)
+      return Response.json({ deleted: true }, { headers: { "Cache-Control": "no-store" } });
+    const result = await VoiceSession.updateOne(
+      {
+        _id: record._id,
+        ownerId: record.ownerId,
+        status: { $in: ["ended", "failed", "expired"] },
+      },
+      {
+        $set: { deletedAt: new Date(), transcript: [], references: [] },
+        $unset: { name: 1, lastRetrievalQuery: 1 },
+      },
+    );
+    if (!result.matchedCount)
+      throw new AppError(
+        "CONFLICT",
+        "End this conversation before deleting it.",
+        409,
+      );
+    return Response.json({ deleted: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return failure(error);
+  }
+}

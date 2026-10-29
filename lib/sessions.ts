@@ -1,10 +1,11 @@
 import mongoose from "mongoose";
 import { connect } from "../database/connection";
-import { Account, Usage, VoiceSession } from "../database/models";
+import { Account, Book, Usage, VoiceSession } from "../database/models";
 import { ownedBook } from "./books";
 import { AppError } from "./errors";
 import { plans, utcPeriod, type Plan } from "./plans";
 import { idSchema } from './validation';
+import { conversationName } from './conversation-history';
 export async function reserveSession(
   ownerId: string,
   bookId: string,
@@ -20,7 +21,7 @@ export async function reserveSession(
       409,
     );
   if (resumeFrom) {
-    if (!idSchema.safeParse(resumeFrom).success || !await VoiceSession.exists({ _id: resumeFrom, ownerId, bookId: book._id, status: { $in: ['ended', 'failed', 'expired'] }, 'transcript.0': { $exists: true } }))
+    if (!idSchema.safeParse(resumeFrom).success || !await VoiceSession.exists({ _id: resumeFrom, ownerId, bookId: book._id, status: { $in: ['ended', 'failed', 'expired'] }, deletedAt: { $exists: false }, 'transcript.0': { $exists: true } }))
       throw new AppError('NOT_FOUND', 'Saved conversation is unavailable for this book.', 404);
   }
   const period = utcPeriod();
@@ -162,3 +163,85 @@ export async function usageSummary(ownerId: string) {
     resetAt: period.end.toISOString(),
   };
 }
+
+export type LibraryConversationItem = {
+  id: string;
+  name: string;
+  date: string;
+  status: string;
+  durationSeconds: number;
+  preview: string;
+  hasTranscript: boolean;
+  book: {
+    id: string;
+    title: string;
+    author: string;
+    slug: string;
+    coverKey?: string | null;
+    status: string;
+  } | null;
+};
+
+export async function allUserConversations(
+  ownerId: string,
+  limit = 20,
+  cursor?: string,
+): Promise<{ items: LibraryConversationItem[]; nextCursor: string | null }> {
+  await connect();
+  const query: Record<string, unknown> = { ownerId, deletedAt: { $exists: false } };
+  if (cursor && idSchema.safeParse(cursor).success) {
+    query._id = { $lt: cursor };
+  }
+
+  const records = await VoiceSession.find(query)
+    .select("name bookId reservedAt status durationSeconds transcript")
+    .slice("transcript", 1)
+    .sort({ _id: -1 })
+    .limit(limit + 1)
+    .lean();
+
+  const bookIds = Array.from(new Set(records.map((r) => r.bookId.toString())));
+  const books = await Book.find({
+    _id: { $in: bookIds },
+    ownerId,
+  })
+    .select("title author slug coverKey status")
+    .lean();
+
+  const bookMap = new Map(books.map((b) => [b._id.toString(), b]));
+
+  const items: LibraryConversationItem[] = records.slice(0, limit).map((record) => {
+    const book = bookMap.get(record.bookId.toString());
+    const transcriptTurns = (record.transcript || []).map((turn) => ({
+      role: turn.role as "user" | "assistant",
+      text: turn.text,
+    }));
+    return {
+      id: record._id.toString(),
+      name:
+        record.name ||
+        conversationName(transcriptTurns),
+      date: record.reservedAt.toISOString(),
+      status: record.status,
+      durationSeconds: record.durationSeconds,
+      preview: record.transcript?.[0]?.text.slice(0, 140) || "",
+      hasTranscript: Boolean(record.transcript?.length),
+      book: book
+        ? {
+            id: book._id.toString(),
+            title: book.title,
+            author: book.author,
+            slug: book.slug,
+            coverKey: book.coverKey ?? null,
+            status: book.status,
+          }
+        : null,
+    };
+  });
+
+  const nextCursor =
+    records.length > limit ? records[limit - 1]._id.toString() : null;
+
+  return { items, nextCursor };
+}
+

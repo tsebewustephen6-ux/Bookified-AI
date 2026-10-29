@@ -138,12 +138,12 @@ describe("boundary controls", () => {
       ),
     ).not.toThrow();
   });
-  it("requires origin evidence and matches mobile-browser Referer origins exactly", () => {
+  it("requires origin evidence and matches first-party Referer origins when origin is null", () => {
     process.env.APP_BASE_URL = "https://bookified.example";
     const request = (headers: Record<string, string>) => new Request("https://bookified.example", { headers });
     expect(() => sameOrigin(request({}))).toThrow();
     expect(() => sameOrigin(request({ origin: "null" }))).toThrow();
-    expect(() => sameOrigin(request({ origin: "null", referer: "https://bookified.example/api/mobile/oauth" }))).not.toThrow();
+    expect(() => sameOrigin(request({ origin: "null", referer: "https://bookified.example/sign-in" }))).not.toThrow();
     expect(() => sameOrigin(request({ referer: "https://bookified.example.attacker.example/" }))).toThrow();
     expect(() => sameOrigin(request({ referer: "invalid" }))).toThrow();
     expect(() => sameOrigin(request({ origin: "https://foreign.example", referer: "https://bookified.example/" }))).toThrow();

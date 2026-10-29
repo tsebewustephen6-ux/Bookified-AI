@@ -1,7 +1,34 @@
 import { z } from 'zod';
 
 export const savedTurnSchema = z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(30000) });
-export const historySchema = z.object({ items: z.array(z.object({ id: z.string(), name: z.string().optional(), date: z.string(), status: z.string(), durationSeconds: z.number(), preview: z.string(), hasTranscript: z.boolean() })), nextCursor: z.string().nullable() });
+export const historyItemSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  date: z.string(),
+  status: z.string(),
+  durationSeconds: z.number(),
+  preview: z.string(),
+  hasTranscript: z.boolean(),
+  book: z.object({
+    id: z.string(),
+    title: z.string(),
+    author: z.string(),
+    slug: z.string(),
+    coverKey: z.string().nullable().optional(),
+    status: z.string().optional(),
+  }).nullable().optional(),
+});
+export const historySchema = z.object({
+  book: z.object({
+    id: z.string(),
+    title: z.string(),
+    author: z.string(),
+    slug: z.string(),
+    coverKey: z.string().nullable().optional(),
+  }).optional(),
+  items: z.array(historyItemSchema),
+  nextCursor: z.string().nullable(),
+});
 export const savedSessionSchema = z.object({ id: z.string(), messages: z.array(savedTurnSchema), resumeFrom: z.string().nullable() });
 export type SavedTurn = z.infer<typeof savedTurnSchema>;
 export function conversationName(messages: SavedTurn[]): string {

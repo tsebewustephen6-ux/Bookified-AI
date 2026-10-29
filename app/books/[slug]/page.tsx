@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { currentOwner, entitlement } from "@/lib/auth";
@@ -65,12 +66,14 @@ export default async function BookPage({
             administrator to restore it.
           </div>
         ) : (
-          <Conversation
-            key={data.id}
-            bookId={data.id}
-            limit={limit}
-            voiceName={selectedVoice.name}
-          />
+          <Suspense fallback={<p className="p-6 text-center text-xs text-[var(--muted)]">Opening discussion…</p>}>
+            <Conversation
+              key={data.id}
+              bookId={data.id}
+              limit={limit}
+              voiceName={selectedVoice.name}
+            />
+          </Suspense>
         )}
       </div>
     </>

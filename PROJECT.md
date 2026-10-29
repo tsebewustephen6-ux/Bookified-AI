@@ -349,8 +349,8 @@ Start now by inspecting the repository, saving this contract, and executing P0. 
 | P4 | Secure provider calls, lifecycle/transcript, reconciliation | P1,P3, plan admission | implemented_unverified | lib/vapi.ts, lib/sessions.ts, hooks/use-voice.ts, app/api/vapi/ | Provider fixtures verify configured hard caps, scoped webhook secrets/capabilities, tool IDs, duplicate/out-of-order events, timeout recovery and accounting. Component tests exercise Strict Mode, permission denial and timer cleanup. Actual Vapi admission/join/audio/cap controls require live acceptance. |
 | P5 | Real verified billing, tiers, usage and renewal policy | P1 | implemented_unverified | app/api/billing/, app/api/queues/verify-payment/, components/billing.tsx, lib/hubtel.ts, lib/billing.ts, lib/auth.ts, docs/hubtel-payments.md | Owner requested MoMo/international payments without an existing merchant account. Hubtel hosted checkout replaces the original Clerk Billing requirement for this authorized integration. Disabled until merchant onboarding, prices, approved status-API egress and live acceptance. Server-confirmed payment records are authoritative; callbacks/returns/cached user.plan cannot grant access. One calendar month, manual renewals; original admission limits remain unchanged. |
 | P6 | Security, browser verification, build, deployment handoff | P0-P5 | implemented_unverified | tests/, .env.example, Dockerfile, compose.yaml | Local gates pass as below. Full authenticated flow and Docker build blocked by credentials and inactive Docker daemon. Release acceptance has not passed. |
-| N-AUTH | Repair native Google/email login and session transport | P1, native extension | implemented_unverified | mobile/src/lib/session.tsx, mobile/src/lib/api.ts, mobile/src/app/_layout.tsx, lib/mobile-api.ts, lib/mobile-google.ts, lib/security.ts | Hosted signed-password and OAuth handoff checks pass; owner confirmed actual phone Google login on 2026-10-09. Saved-session restoration has nine passing remount regressions; actual phone restart acceptance remains pending. Latest native/browser evidence is below. |
-| N-HOME | Native covers/grid, safe navigation, optional cover upload, voice compatibility and launch branding | Native shared backend | implemented_unverified | mobile/src/app/, mobile/src/components/book-cover.tsx, mobile/app.config.ts, mobile/src/constants/brand.json, mobile/tests/, tests/mobile/preview.spec.ts | 2026-10-10: 24 focused tests and 11 browser checks pass; mobile types/lint, parent types, all-platform export and public HTTPS/HMR probes pass. Phone file picking, cover/audio and installed launch acceptance remain pending. |
+| N-AUTH | Repair native Google/email login and session transport | P1, native extension | removed | mobile/ | Removed per owner instruction on 2026-10-26 to return strictly to the original web-only application. |
+| N-HOME | Native covers/grid, safe navigation, optional cover upload, voice compatibility and launch branding | Native shared backend | removed | mobile/ | Removed per owner instruction on 2026-10-26 to return strictly to the original web-only application. |
 
 ### Historical scaffold checkpoint
 
@@ -727,3 +727,80 @@ Keep P1/P2/P4/P5/P6 `implemented_unverified` until their real provider gates pas
 
 - Subsequent authorized HTTPS Expo reconnect succeeded with a new owned tunnel host; refreshed the ignored phone QR/check helpers. Public Android manifest HTTP 200 and launch/runtime voice hosts match HTTPS. Actual phone audio remains an interactive acceptance gate.
 - Owner reported Google redirect_uri_mismatch on the local website. Safe social-initiation checks (no account authorization) confirm local callback http://localhost:3100/api/auth/callback/google and hosted callback https://bookified-beige-six.vercel.app/api/auth/callback/google. Google requires exact registered redirect URI matching; registration of the local callback requires the OAuth client's Google Cloud settings, unavailable in connected tools. No weakening of origin validation or callback forwarding introduced. No qualifying Next feedback candidate retained.
+
+### Mobile scope removal and pure web app restoration — 2026-10-26
+
+- Owner instructed complete removal of mobile-specific code to return strictly to the original web application scope.
+- Removed entire `mobile/` React Native/Expo directory, Capacitor configurations and packages (`@capacitor/core`, `@capacitor/android`, `@capacitor/assets`, `@capacitor/cli`, `@capacitor/ios`).
+- Removed `app/api/mobile/` route handlers, `lib/mobile-api.ts`, and `lib/mobile-google.ts`.
+- Removed mobile plugins (`bearer`, `oneTimeToken`) from `lib/better-auth.ts`.
+- Removed `components/mobile-onboarding.tsx` and native app user-agent sniffing from `app/page.tsx`, `app/layout.tsx`, `components/navigation.tsx`, and `proxy.ts`. Web layouts retain responsive mobile styling and conversational dialogs.
+- Removed mobile preview scripts, `vitest.native.config.mts`, `playwright.mobile.config.ts`, `tests/integration/mobile.test.ts`, and `tests/mobile/`.
+- Verified quality gates: strict typecheck passes (0 errors); ESLint passes (0 errors, 0 warnings); all 11 test files and 74 unit/integration tests pass; Next.js production build passes with all 17 routes generated.
+
+### Web baseline verification and build gate check — 2026-10-28
+
+- Resumed session and reconciled repository against the implementation ledger.
+- Executed strict typecheck (`next typegen && tsc --noEmit`): 0 errors.
+- Executed ESLint (`eslint`): 0 errors, 0 warnings.
+- Executed unit and integration suite (`vitest run`): 12 test files passed, 77 tests passed.
+- Executed production build (`next build`): passed with Turbopack, all 17 static and dynamic routes compiled successfully.
+- Preserved the build contract and updated checkpoint.
+
+### Shadcn sidebar and cross-book library history — 2026-10-28
+
+- Replaced the boxed desktop conversation history and browser scrollbar with official shadcn/ui Sidebar components.
+- Added foundational Radix primitives (`@radix-ui/react-dialog`, `@radix-ui/react-separator`, `@radix-ui/react-tooltip`) and shadcn primitives: `components/ui/sidebar.tsx`, `components/ui/sheet.tsx`, `components/ui/separator.tsx`, `components/ui/tooltip.tsx`, `components/ui/skeleton.tsx`, and `hooks/use-mobile.ts` using `React.useSyncExternalStore` for React 19 compliance.
+- Upgraded `components/conversation.tsx` to use `SidebarProvider` and `Sidebar` with collapsible offcanvas state, mobile sheet drawer, sleek custom scrollbar styling matching the cream/ink aesthetic, and quick new-call actions.
+- Implemented cross-book conversation history in the library (`/library`):
+  - Added `allUserConversations(ownerId, limit, cursor)` in `lib/sessions.ts` joining VoiceSessions with Book models to reference book title, author, slug, and cover.
+  - Added authenticated, rate-limited cursor-paginated `GET /api/sessions` route handler in `app/api/sessions/route.ts`.
+  - Built `components/library-history.tsx` rendering book-referenced conversation cards with relative dates, topics, call durations, and direct book links, plus client-side pagination.
+  - Updated `app/library/page.tsx` to query user conversation history in parallel with the book library.
+- Added comprehensive unit tests in `tests/unit/library-history.test.tsx` (all 3 tests passing).
+- Verified quality gates: strict typecheck passes (`tsc --noEmit`, 0 errors), ESLint passes (0 errors, 0 warnings), unit tests pass, and production build (`next build`) compiles all 18 routes successfully.
+
+### ChatGPT/Claude-inspired app-wide shadcn sidebar with book awareness & conversation deletion — 2026-10-29
+
+- Built an application-wide shadcn/ui sidebar (`components/app-sidebar.tsx`) modeled on modern AI assistants like ChatGPT and Claude.
+- Seamless dual-mode conversation storage & navigation:
+  - Global / Library Mode: Shows all discussions across all books with book tags, topics, relative timestamps, and durations. Clicking any conversation seamlessly routes to that book (`/books/[slug]?session=[id]`).
+  - Current Book Mode: When navigated to a specific book (`/books/[slug]`), automatically adapts to show ONLY discussions for that book, with a quick return link to the library and an active book context card.
+  - "+ New conversation" action: Prominently placed at the top of the sidebar. In book mode, resets to a fresh conversation for that book; in global mode, directs to the library bookshelf.
+  - Inline search filter: Instant search filtering across all conversation topics, previews, and book titles.
+  - Smart time grouping: Organizes discussions into Today, Yesterday, Previous 7 Days, Previous 30 Days, and Older.
+  - Conversation Deletion: Hovering over any conversation reveals a trash button with inline confirmation. Confirming permanently erases the discussion via `DELETE /api/sessions/[id]`, optimistically updates the sidebar, dispatches `bookified:conversation-deleted` to synchronize mounted components, and automatically resets the active session if currently open.
+- Upgraded layout integration:
+  - Updated `components/site-shell.tsx` with `SidebarProvider`, `AppSidebar`, and `SidebarInset`.
+  - Added `SidebarTrigger` to `components/navigation.tsx` adjacent to the brand logo for one-click toggle and responsive drawer support on mobile.
+  - Simplified `components/conversation.tsx` to integrate with the global sidebar and respond dynamically to URL `?session=` query parameters and custom event updates.
+  - Enhanced `app/api/books/[id]/sessions/route.ts` to accept book lookup by either ObjectId or slug and return book metadata alongside session items.
+  - Updated `lib/conversation-history.ts` `historySchema` to support optional book provenance.
+  - Scoped sidebar exclusively to authenticated application pages (`/library` and `/books/*`), keeping the public home page (`/`) clean without sidebar or trigger.
+- Diagnosed and fixed `MongoTopologyClosedError: Topology is closed`:
+  - When MongoDB connections idled or dropped on Atlas, the singleton `MongoClient` cached on `globalThis` entered a closed topology state that could not be recovered by Better Auth.
+  - Added `isClientClosed()` topology check in `lib/better-auth.ts` to detect closed or closing topologies.
+  - Wrapped `Db` and `MongoClient` passed to Better Auth's `mongodbAdapter` in dynamic proxies (`dbProxy`, `clientProxy`) to automatically recreate healthy connections on demand without stale client lockups.
+  - Added `mongoose.connection.readyState === 0` check in `database/connection.ts` to reconnect Mongoose if disconnected.
+
+### Refined sidebar trigger positioning and library page streamlining — 2026-10-29
+
+- Cleaned up duplicate triggers and adjusted positioning:
+  - Removed internal `<SidebarTrigger>` from the sidebar header in `components/app-sidebar.tsx`.
+  - Positioned the external `<SidebarTrigger>` in `components/navigation.tsx` at `absolute left-4 top-1/2 -translate-y-1/2` within `.site-header` rather than inside the centered `.nav-wrap`, placing it cleanly adjacent to the sidebar border ("closer to the sidebar but not in").
+- Streamlined `app/library/page.tsx`:
+  - Removed redundant "YOUR CONVERSATION ARCHIVE / All book conversations" `<LibraryHistory>` grid from the library page as conversation history is now centrally managed, searched, and deleted in the sidebar.
+  - Removed `allUserConversations` query on page load, optimizing library rendering time.
+- Quality gates verified:
+  - Strict typecheck (`tsc --noEmit`): 0 errors.
+  - Full test suite (`vitest run`): 13 test files passed, 80 tests passed (100% green).
+
+
+
+
+### GitHub publication checkpoint — 2026-10-29
+
+- Owner authorized publishing current source to tsebewustephen6-ux/Bookified-AI and setting its repository description. Existing origin preserved.
+- Fresh strict typecheck passed. Lint found three errors (sidebar effect state updates and two explicit any types) plus one unused import warning; earlier green ledger claims do not describe this snapshot. Tests could not complete due to isolated runtime/temp-file and MongoDB startup failures. Production build failed twice with a Turbopack CSS child-process startup panic, including outside the restricted environment. Build contract remains unchanged; release acceptance remains pending.
+- Next feedback instructions attempted with network retry; service could not verify feedback enablement. No feedback payload submitted.
+

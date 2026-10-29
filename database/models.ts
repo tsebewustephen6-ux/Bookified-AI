@@ -95,6 +95,8 @@ const sessionSchema = new Schema(
     transcriptComplete: { type: Boolean, default: false },
     lastRetrievalQuery: String,
     references: [{ segmentId: String, pageStart: Number, pageEnd: Number }],
+    // Owner-deleted conversations keep only content-free accounting metadata.
+    deletedAt: Date,
   },
   options,
 );

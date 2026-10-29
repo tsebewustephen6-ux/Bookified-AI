@@ -32,7 +32,7 @@ export default async function LibraryPage({
   }
 
   return (
-    <section className="library-section" style={{ paddingTop: "60px", paddingBottom: "100px" }}>
+    <section className="library-section" style={{ paddingTop: "60px", paddingBottom: "60px" }}>
       <div className="section-heading">
         <div>
           <p className="eyebrow">YOUR PERSONAL BOOKSHELF</p>

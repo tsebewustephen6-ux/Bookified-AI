@@ -1,10 +1,17 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { Brand } from "@/components/brand";
 import { SignInForm } from "@/components/sign-in-form";
 import { authConfigured } from "@/lib/env";
 
 export default function SignInPage() {
   return (
     <div className="auth-page">
+      <div className="auth-brand-wrap">
+        <Link href="/" aria-label="Bookified home" className="brand">
+          <Brand />
+        </Link>
+      </div>
       {authConfigured() ? (
         <Suspense fallback={<p role="status">Loading sign-in…</p>}>
           <SignInForm />

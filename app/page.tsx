@@ -9,23 +9,11 @@ import {
 import { currentOwner } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { headers } from "next/headers";
-
-import { MobileOnboarding } from "@/components/mobile-onboarding";
-
 export default async function Home() {
   const owner = await currentOwner();
-  const headersList = await headers();
-  const userAgent = headersList.get("user-agent") || "";
-  console.log("USER AGENT IS:", userAgent);
-  const isNative = userAgent.includes("BookifiedMobileApp");
 
   if (owner) {
     redirect("/library");
-  }
-
-  if (isNative) {
-    return <MobileOnboarding />;
   }
 
   return (

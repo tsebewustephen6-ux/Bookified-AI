@@ -4,7 +4,7 @@ const globalDb = globalThis as typeof globalThis & {
   bookifiedDb?: Promise<typeof mongoose>;
 };
 export async function connect() {
-  if (!globalDb.bookifiedDb)
+  if (!globalDb.bookifiedDb || mongoose.connection.readyState === 0)
     globalDb.bookifiedDb = mongoose
       .connect(required("MONGODB_URI"), {
         serverSelectionTimeoutMS: 10000,
